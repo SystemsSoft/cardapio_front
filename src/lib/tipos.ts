@@ -134,7 +134,14 @@ export interface MesaGestao {
 export interface EstadoGestao {
   mesas: MesaGestao[];
   taxaServicoPercentual: number;
-  resumoDoDia: { mesasFechadas: number; faturamentoSubtotal: number; abertoEm: string | null };
+  /** Período de caixa: aberto (somando desde abertoEm) ou fechado (até alguém clicar em "Abrir caixa"). */
+  resumoDoDia: {
+    aberto: boolean;
+    mesasFechadas: number;
+    faturamentoSubtotal: number;
+    abertoEm: string | null;
+    ultimoFechamentoEm: string | null;
+  };
   estoque: { controlados: number; esgotados: number; baixos: number };
 }
 

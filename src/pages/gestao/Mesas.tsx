@@ -1,10 +1,10 @@
-import { BellRing, Clock, Lock, Receipt, Wallet } from 'lucide-react';
+import { BellRing, Clock, Lock, LockOpen, Receipt, Wallet } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAgora } from '../../components/comuns';
 import { Abas, Aviso, Botao, Carregando, Janela, Selo, Titulo, Vazio, cx, useAvisos } from '../../components/ui';
 import { gestao, mensagemDe } from '../../lib/api';
-import { FORMAS_PAGAMENTO, dataHora, plural, reais, tempoDesde } from '../../lib/formato';
+import { FORMAS_PAGAMENTO, dataHora, hora, plural, reais, tempoDesde } from '../../lib/formato';
 import type { ConfigFiscal, Fechamento, MesaGestao, Sessao } from '../../lib/tipos';
 import { CartaoPedido, JanelaEmitirNota } from './compartilhado';
 import { useGestao } from './contexto';
@@ -35,7 +35,7 @@ export default function Mesas() {
   const [filtro, setFiltro] = useState<Filtro>('todas');
   const [aberta, setAberta] = useState<number | null>(null);
   const [notaPara, setNotaPara] = useState<Sessao | null>(null);
-  const [fechandoCaixa, setFechandoCaixa] = useState(false);
+  const [ocupadoCaixa, setOcupadoCaixa] = useState(false);
   const [fiscalPronto, setFiscalPronto] = useState(false);
 
   // Só oferece a NFC-e ao fechar a conta se a nota fiscal já estiver configurada.
@@ -56,22 +56,40 @@ export default function Mesas() {
   const emAberto = ocupadas.reduce((s, m) => s + (m.sessao?.total ?? 0), 0);
   const r = estado.resumoDoDia;
 
+  const abrirCaixa = async () => {
+    setOcupadoCaixa(true);
+    try {
+      const t = await gestao.post<Fechamento>('/turno/abrir');
+      avisar(`Caixa aberto às ${hora(t.abertoEm)}.`);
+      recarregarEstado();
+    } catch (e) {
+      avisar(mensagemDe(e), 'erro');
+    } finally {
+      setOcupadoCaixa(false);
+    }
+  };
+
   const fecharCaixa = async () => {
     if (
       !(await confirmar({
         titulo: 'Fechar o caixa?',
         texto: (
           <>
-            O período atual ({plural(r.mesasFechadas, 'mesa fechada', 'mesas fechadas')}, {reais(r.faturamentoSubtotal)}) fica salvo em
-            Fechamentos de caixa e a contagem recomeça do zero agora.
-            {ocupadas.length > 0 && <b className="mt-2 block text-amber-700">Ainda há {plural(ocupadas.length, 'mesa aberta', 'mesas abertas')} — elas entram no próximo período.</b>}
+            Fecha o período aberto em <b>{dataHora(r.abertoEm)}</b> com {plural(r.mesasFechadas, 'mesa fechada', 'mesas fechadas')} e{' '}
+            {reais(r.faturamentoSubtotal)}. Ele fica salvo em Fechamentos de caixa, e o caixa só volta a contar quando alguém clicar em{' '}
+            <b>Abrir caixa</b>.
+            {ocupadas.length > 0 && (
+              <b className="mt-2 block text-amber-700">
+                Ainda há {plural(ocupadas.length, 'mesa aberta', 'mesas abertas')} — elas só podem ser fechadas depois que o caixa for aberto de novo.
+              </b>
+            )}
           </>
         ),
         confirmar: 'Fechar caixa',
       }))
     )
       return;
-    setFechandoCaixa(true);
+    setOcupadoCaixa(true);
     try {
       const f = await gestao.post<Fechamento>('/turno/fechar');
       avisar(`Caixa fechado: ${reais(f.faturamentoSubtotal)} em ${plural(f.mesasFechadas, 'mesa', 'mesas')}.`);
@@ -79,7 +97,7 @@ export default function Mesas() {
     } catch (e) {
       avisar(mensagemDe(e), 'erro');
     } finally {
-      setFechandoCaixa(false);
+      setOcupadoCaixa(false);
     }
   };
 
@@ -87,15 +105,43 @@ export default function Mesas() {
     <>
       <Titulo titulo="Mesas" subtitulo={`${ocupadas.length} de ${mesas.length} ocupadas`} />
 
+      {!r.aberto && (
+        <Aviso
+          tipo="alerta"
+          className="mb-4"
+          titulo="O caixa está fechado"
+          acao={
+            <Botao icone={<LockOpen className="h-4 w-4" />} carregando={ocupadoCaixa} onClick={abrirCaixa}>
+              Abrir caixa
+            </Botao>
+          }
+        >
+          {r.ultimoFechamentoEm ? `Fechado em ${dataHora(r.ultimoFechamentoEm)}. ` : ''}Abra o caixa para começar um novo período — sem ele não é possível fechar a conta das mesas.
+        </Aviso>
+      )}
+
       <div className="mb-6 grid gap-3 sm:grid-cols-3">
-        <Resumo rotulo="Vendido no período" valor={reais(r.faturamentoSubtotal)} detalhe={`${plural(r.mesasFechadas, 'mesa fechada', 'mesas fechadas')} · desde ${dataHora(r.abertoEm)}`} />
+        <Resumo
+          rotulo="Vendido no período"
+          valor={r.aberto ? reais(r.faturamentoSubtotal) : '—'}
+          detalhe={r.aberto ? `${plural(r.mesasFechadas, 'mesa fechada', 'mesas fechadas')} · desde ${dataHora(r.abertoEm)}` : 'Caixa fechado'}
+        />
         <Resumo rotulo="Em aberto nas mesas" valor={reais(emAberto)} detalhe={plural(ocupadas.length, 'mesa ocupada', 'mesas ocupadas')} />
         <div className="cartao flex flex-col justify-between gap-3 p-4">
-          <p className="text-sm text-stone-500">Caixa</p>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm text-stone-500">Caixa</p>
+            <Selo cor={r.aberto ? 'verde' : 'cinza'}>{r.aberto ? `Aberto desde ${hora(r.abertoEm)}` : 'Fechado'}</Selo>
+          </div>
           <div className="flex flex-wrap gap-2">
-            <Botao variante="escuro" icone={<Lock className="h-4 w-4" />} carregando={fechandoCaixa} onClick={fecharCaixa}>
-              Fechar caixa
-            </Botao>
+            {r.aberto ? (
+              <Botao variante="escuro" icone={<Lock className="h-4 w-4" />} carregando={ocupadoCaixa} onClick={fecharCaixa}>
+                Fechar caixa
+              </Botao>
+            ) : (
+              <Botao icone={<LockOpen className="h-4 w-4" />} carregando={ocupadoCaixa} onClick={abrirCaixa}>
+                Abrir caixa
+              </Botao>
+            )}
             <Link to="../caixa">
               <Botao variante="secundario" icone={<Wallet className="h-4 w-4" />}>
                 Anteriores
@@ -162,6 +208,8 @@ export default function Mesas() {
       {mesaAberta && (
         <DetalheMesa
           mesa={mesaAberta}
+          caixaAberto={r.aberto}
+          aoAbrirCaixa={abrirCaixa}
           aoFechar={() => setAberta(null)}
           aoFecharConta={(s) => {
             setAberta(null);
@@ -184,7 +232,19 @@ function Resumo({ rotulo, valor, detalhe }: { rotulo: string; valor: string; det
   );
 }
 
-function DetalheMesa({ mesa, aoFechar, aoFecharConta }: { mesa: MesaGestao; aoFechar: () => void; aoFecharConta: (s: Sessao) => void }) {
+function DetalheMesa({
+  mesa,
+  caixaAberto,
+  aoAbrirCaixa,
+  aoFechar,
+  aoFecharConta,
+}: {
+  mesa: MesaGestao;
+  caixaAberto: boolean;
+  aoAbrirCaixa: () => void;
+  aoFechar: () => void;
+  aoFecharConta: (s: Sessao) => void;
+}) {
   const { avisar } = useAvisos();
   const [forma, setForma] = useState<string>('');
   const [fechando, setFechando] = useState(false);
@@ -251,9 +311,18 @@ function DetalheMesa({ mesa, aoFechar, aoFecharConta }: { mesa: MesaGestao; aoFe
                 Chamado atendido
               </Botao>
             )}
-            <Botao className="flex-1" variante="escuro" icone={<Receipt className="h-4 w-4" />} onClick={() => setModoFechar(true)}>
-              Fechar conta · {reais(s.total)}
-            </Botao>
+            {caixaAberto ? (
+              <Botao className="flex-1" variante="escuro" icone={<Receipt className="h-4 w-4" />} onClick={() => setModoFechar(true)}>
+                Fechar conta · {reais(s.total)}
+              </Botao>
+            ) : (
+              <div className="flex w-full flex-col gap-2 rounded-xl bg-amber-50 p-3 text-sm text-amber-900 sm:flex-row sm:items-center">
+                <span className="flex-1">O caixa está fechado. Abra o caixa para fechar a conta desta mesa.</span>
+                <Botao tamanho="p" icone={<LockOpen className="h-4 w-4" />} onClick={aoAbrirCaixa}>
+                  Abrir caixa
+                </Botao>
+              </div>
+            )}
           </div>
         ))
       }

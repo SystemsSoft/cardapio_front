@@ -15,6 +15,7 @@ interface Estado {
   restaurante: string;
   marca: Marca;
   chavePublica: string;
+  caixaAberto?: boolean;
   mesas: MesaGestao[];
 }
 
@@ -241,6 +242,7 @@ export default function Garcom() {
       {fechar?.sessao && (
         <FecharMesa
           mesa={fechar}
+          caixaAberto={estado.caixaAberto !== false}
           aoFechar={() => setFechar(null)}
           aoConfirmar={(forma) =>
             acao(() => api.post(`/garcom/${rid}/mesas/${fechar.numero}/fechar${q}`, { formaPagamento: forma, garcom: nomeSalvo.ler() || '' }), `Mesa ${fechar.numero} fechada.`).then(() => setFechar(null))
@@ -382,7 +384,17 @@ function Linha({ mesa, detalhe, destaque, children }: { mesa: number; detalhe: R
   );
 }
 
-function FecharMesa({ mesa, aoFechar, aoConfirmar }: { mesa: MesaGestao; aoFechar: () => void; aoConfirmar: (forma: string) => Promise<void> }) {
+function FecharMesa({
+  mesa,
+  caixaAberto,
+  aoFechar,
+  aoConfirmar,
+}: {
+  mesa: MesaGestao;
+  caixaAberto: boolean;
+  aoFechar: () => void;
+  aoConfirmar: (forma: string) => Promise<void>;
+}) {
   const [forma, setForma] = useState('');
   const [enviando, setEnviando] = useState(false);
   const s = mesa.sessao!;
@@ -392,6 +404,11 @@ function FecharMesa({ mesa, aoFechar, aoConfirmar }: { mesa: MesaGestao; aoFecha
       aoFechar={aoFechar}
       titulo={`Mesa ${mesa.numero}`}
       rodape={
+        !caixaAberto ? (
+          <Aviso tipo="alerta" titulo="O caixa está fechado">
+            Peça ao gerente para abrir o caixa antes de fechar a conta.
+          </Aviso>
+        ) : (
         <Botao
           largo
           tamanho="g"
@@ -406,6 +423,7 @@ function FecharMesa({ mesa, aoFechar, aoConfirmar }: { mesa: MesaGestao; aoFecha
         >
           Fechar conta · {reais(s.total)}
         </Botao>
+        )
       }
     >
       <div className="mb-4 rounded-xl bg-stone-50 p-4 text-sm">
