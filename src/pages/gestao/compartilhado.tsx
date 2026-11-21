@@ -1,4 +1,4 @@
-import { ChefHat, CheckCheck, Clock, X } from 'lucide-react';
+import { ChefHat, CheckCheck, Clock, User, X } from 'lucide-react';
 import { useState } from 'react';
 import { useAgora } from '../../components/comuns';
 import { Aviso, Botao, Campo, Entrada, Janela, Selecao, Selo, cx, useAvisos } from '../../components/ui';
@@ -44,13 +44,19 @@ export function CartaoPedido({ pedido, mostrarMesa = true, compacto }: { pedido:
       <div className="flex items-center gap-2 border-b border-stone-100 px-4 py-2.5">
         {mostrarMesa && <span className="rounded-lg bg-stone-900 px-2 py-0.5 text-sm font-bold text-white">Mesa {pedido.mesa}</span>}
         <span className="text-sm font-semibold text-stone-500">#{pedido.id}</span>
-        <span className="flex-1 truncate text-sm text-stone-600">{pedido.clienteNome}</span>
+        <span className="flex-1" />
         <span className={cx('flex items-center gap-1 text-xs', atrasado ? 'font-bold text-red-600' : 'text-stone-500')}>
           <Clock className="h-3.5 w-3.5" />
           {tempoDesde(pedido.criadoEm, agora)}
         </span>
       </div>
-      <ul className={cx('space-y-1 px-4', compacto ? 'py-2 text-sm' : 'py-3')}>
+      {pedido.clienteNome && (
+        <p className="flex items-center gap-1.5 px-4 pt-2.5 font-bold text-stone-900" title="Quem fez o pedido">
+          <User className="h-4 w-4 shrink-0 text-marca" />
+          <span className="break-words">{pedido.clienteNome}</span>
+        </p>
+      )}
+      <ul className={cx('space-y-1 px-4', compacto ? 'py-2 text-sm' : 'py-3', pedido.clienteNome && 'pt-1.5')}>
         {pedido.itens.map((i) => (
           <li key={i.id}>
             <span className="font-bold">{i.quantidade}×</span> {i.nome}

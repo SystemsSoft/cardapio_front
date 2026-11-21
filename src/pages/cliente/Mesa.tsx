@@ -482,9 +482,41 @@ function Carrinho({
   const [obs, setObs] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState('');
+  const [erroNome, setErroNome] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
+  const campoNome = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!aberto) setConfirmando(false);
+  }, [aberto]);
 
   const mudar = (chave: string, quantidade: number) =>
     setItens((lista) => (quantidade <= 0 ? lista.filter((i) => i.chave !== chave) : lista.map((i) => (i.chave === chave ? { ...i, quantidade } : i))));
+
+  const pedirConfirmacao = () => {
+    setErro('');
+    if (!nome.trim()) {
+      setErroNome(true);
+      campoNome.current?.focus();
+      return;
+    }
+    setConfirmando(true);
+  };
+
+  const enviar = async () => {
+    setEnviando(true);
+    setErro('');
+    try {
+      nomeSalvo.salvar(nome.trim());
+      await aoEnviar(nome.trim(), obs.trim());
+      setObs('');
+    } catch (e) {
+      setErro(mensagemDe(e));
+      setConfirmando(false);
+    } finally {
+      setEnviando(false);
+    }
+  };
 
   return (
     <Janela
@@ -492,27 +524,33 @@ function Carrinho({
       aoFechar={aoFechar}
       titulo="Seu pedido"
       rodape={
-        <Botao
-          tamanho="g"
-          largo
-          carregando={enviando}
-          disabled={!itens.length}
-          onClick={async () => {
-            setEnviando(true);
-            setErro('');
-            try {
-              if (nome.trim()) nomeSalvo.salvar(nome.trim());
-              await aoEnviar(nome.trim(), obs.trim());
-              setObs('');
-            } catch (e) {
-              setErro(mensagemDe(e));
-            } finally {
-              setEnviando(false);
-            }
-          }}
-        >
-          Enviar pedido · {reais(total)}
-        </Botao>
+        confirmando ? (
+          <div className="space-y-3">
+            <p className="text-center text-sm text-stone-600">
+              O pedido vai para a cozinha em nome de <b className="text-base text-stone-900">{nome.trim()}</b>. Está certo?
+            </p>
+            <div className="flex gap-2">
+              <Botao
+                variante="secundario"
+                tamanho="g"
+                disabled={enviando}
+                onClick={() => {
+                  setConfirmando(false);
+                  setTimeout(() => campoNome.current?.select(), 50);
+                }}
+              >
+                Alterar nome
+              </Botao>
+              <Botao tamanho="g" largo className="flex-1" carregando={enviando} onClick={enviar}>
+                Confirmar e enviar
+              </Botao>
+            </div>
+          </div>
+        ) : (
+          <Botao tamanho="g" largo disabled={!itens.length} onClick={pedirConfirmacao}>
+            Enviar pedido · {reais(total)}
+          </Botao>
+        )
       }
     >
       {!itens.length ? (
@@ -545,8 +583,21 @@ function Carrinho({
       )}
       <div className="mt-4 space-y-3">
         <label className="block">
-          <span className="rotulo">Seu nome (opcional)</span>
-          <Entrada value={nome} onChange={(e) => setNome(e.target.value)} maxLength={40} placeholder="Para o garçom saber de quem é" />
+          <span className="rotulo">Seu nome</span>
+          <Entrada
+            ref={campoNome}
+            value={nome}
+            onChange={(e) => {
+              setNome(e.target.value);
+              setErroNome(false);
+              setConfirmando(false);
+            }}
+            maxLength={40}
+            autoComplete="given-name"
+            placeholder="Para o garçom saber de quem é o pedido"
+            className={cx(erroNome && 'border-red-400 bg-red-50 focus:border-red-500 focus:ring-red-200')}
+          />
+          {erroNome && <span className="mt-1 block text-xs font-medium text-red-600">Informe seu nome para enviar o pedido.</span>}
         </label>
         <label className="block">
           <span className="rotulo">Observação do pedido</span>

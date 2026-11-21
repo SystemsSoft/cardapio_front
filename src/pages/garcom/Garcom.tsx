@@ -5,7 +5,7 @@ import { useAgora } from '../../components/comuns';
 import { PainelQrMesa, linkDaMesa } from '../../components/QrMesa';
 import { Abas, Aviso, Botao, Campo, Carregando, Entrada, Janela, Selo, cx, useAvisos } from '../../components/ui';
 import { api, mensagemDe, nomeSalvo } from '../../lib/api';
-import { FORMAS_PAGAMENTO, reais, tempoDesde } from '../../lib/formato';
+import { FORMAS_PAGAMENTO, ROTULO_STATUS, reais, tempoDesde } from '../../lib/formato';
 import { aplicarMarca } from '../../lib/marca';
 import { liberarSom, tocar } from '../../lib/som';
 import { useTempoReal } from '../../lib/tempoReal';
@@ -19,6 +19,7 @@ interface Estado {
 }
 
 type Aba = 'agora' | 'mesas';
+const COR_STATUS_GARCOM = { recebido: 'azul', preparando: 'amarelo', pronto: 'verde', entregue: 'cinza', cancelado: 'vermelho' } as const;
 const TIPOS_AVISO = [
   ['pronto', 'Pedido pronto para servir'],
   ['garcom', 'Mesa chamando'],
@@ -186,7 +187,16 @@ export default function Garcom() {
           {prontos.length > 0 && (
             <Grupo titulo="Prontos para servir" icone={<UtensilsCrossed className="h-4 w-4 text-emerald-600" />}>
               {prontos.map((p) => (
-                <Linha key={p.id} mesa={mesaDe(p)} detalhe={p.itens.map((i) => `${i.quantidade}× ${i.nome}`).join(', ')}>
+                <Linha
+                  key={p.id}
+                  mesa={mesaDe(p)}
+                  detalhe={
+                    <>
+                      {p.clienteNome && <b className="block text-stone-900">{p.clienteNome}</b>}
+                      {p.itens.map((i) => `${i.quantidade}× ${i.nome}`).join(', ')}
+                    </>
+                  }
+                >
                   <Botao tamanho="p" variante="sucesso" onClick={() => acao(() => api.post(`/garcom/${rid}/pedidos/${p.id}/entregue${q}`), `Pedido #${p.id} entregue.`)}>
                     Entreguei
                   </Botao>
@@ -243,9 +253,24 @@ export default function Garcom() {
         <Janela aberta aoFechar={() => setOpcoesMesa(null)} titulo={`Mesa ${opcoesMesa.numero}`} largura="max-w-sm">
           <div className="space-y-2 pb-2">
             {opcoesMesa.sessao && (
-              <p className="mb-3 text-sm text-stone-600">
-                Conta em aberto: <b>{reais(opcoesMesa.sessao.total)}</b>
-              </p>
+              <>
+                <p className="text-sm text-stone-600">
+                  Conta em aberto: <b>{reais(opcoesMesa.sessao.total)}</b>
+                </p>
+                {opcoesMesa.sessao.pedidos.length > 0 && (
+                  <ul className="mb-3 max-h-60 space-y-2 overflow-y-auto rounded-xl bg-stone-50 p-3 text-sm">
+                    {opcoesMesa.sessao.pedidos.map((p) => (
+                      <li key={p.id} className={cx(p.status === 'cancelado' && 'opacity-50 line-through')}>
+                        <div className="flex items-center justify-between gap-2">
+                          <b className="truncate">{p.clienteNome || `Pedido #${p.id}`}</b>
+                          <Selo cor={COR_STATUS_GARCOM[p.status]}>{ROTULO_STATUS[p.status]}</Selo>
+                        </div>
+                        <p className="text-stone-600">{p.itens.map((i) => `${i.quantidade}× ${i.nome}`).join(', ')}</p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </>
             )}
             <Botao
               largo
@@ -347,7 +372,7 @@ function Grupo({ titulo, icone, children }: { titulo: string; icone: ReactNode; 
   );
 }
 
-function Linha({ mesa, detalhe, destaque, children }: { mesa: number; detalhe: string; destaque?: boolean; children: ReactNode }) {
+function Linha({ mesa, detalhe, destaque, children }: { mesa: number; detalhe: ReactNode; destaque?: boolean; children: ReactNode }) {
   return (
     <div className={cx('cartao flex items-center gap-3 p-3', destaque && 'ring-2 ring-marca')}>
       <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-stone-900 text-lg font-extrabold text-white">{mesa}</span>

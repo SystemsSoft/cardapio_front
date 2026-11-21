@@ -110,10 +110,11 @@ export default function LayoutGestao() {
   useTempoReal(
     liberado && token ? { evento: 'gestao:entrar', dados: { token } } : null,
     {
-      'gestao:evento': (e: { tipo: string; mesa?: number; por?: string }) => {
+      'gestao:evento': (e: { tipo: string; mesa?: number; por?: string; pedido?: { clienteNome?: string } }) => {
         if (e.tipo === 'novo-pedido') {
           tocar('pedido');
-          avisar(`🆕 Novo pedido · Mesa ${e.mesa}`, 'info');
+          const nome = e.pedido?.clienteNome;
+          avisar(`🆕 Novo pedido · Mesa ${e.mesa}${nome ? ` · ${nome}` : ''}`, 'info');
         } else if (e.tipo === 'garcom-chamado') {
           tocar('garcom');
           avisar(`🙋 Mesa ${e.mesa} está chamando o garçom`, 'info');
