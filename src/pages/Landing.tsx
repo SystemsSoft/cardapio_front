@@ -1,4 +1,4 @@
-import { BellRing, Boxes, ChefHat, FileText, QrCode, Smartphone, Sparkles, Users } from 'lucide-react';
+import { BellRing, Boxes, ChefHat, Palette, QrCode, Smartphone, Sparkles, Users } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Logo } from '../components/comuns';
 import { Botao } from '../components/ui';
@@ -8,7 +8,7 @@ const RECURSOS = [
   { icone: ChefHat, titulo: 'Cozinha em tempo real', texto: 'Os pedidos chegam na hora, com aviso sonoro. Mude o status e o cliente acompanha.' },
   { icone: BellRing, titulo: 'Garçom no celular', texto: 'Notificações de “pronto para servir”, “chamando” e “pediu a conta” no celular de cada garçom.' },
   { icone: Boxes, titulo: 'Controle de estoque', texto: 'Baixa automática a cada pedido. Quando acaba, o item aparece como esgotado.' },
-  { icone: FileText, titulo: 'Nota fiscal (NFC-e)', texto: 'Emita a NFC-e direto na Sefaz ao fechar a conta, com cupom e XML.' },
+  { icone: Palette, titulo: 'Com a cara do seu restaurante', texto: 'Sua logo, sua capa e suas cores no cardápio, e QR Codes prontos para imprimir.' },
   { icone: Sparkles, titulo: 'Cardápio por foto', texto: 'Tire uma foto do cardápio impresso e a inteligência artificial monta o digital para você revisar.' },
 ];
 
@@ -48,7 +48,7 @@ export default function Landing() {
               Seu restaurante recebendo pedidos <span className="text-marca">pela mesa</span>.
             </h1>
             <p className="mt-5 max-w-lg text-lg text-stone-600">
-              QR Code em cada mesa, pedidos direto na cozinha, garçom avisado no celular e conta fechada com nota fiscal. Tudo em um só lugar.
+              QR Code em cada mesa, pedidos direto na cozinha, garçom avisado no celular e conta fechada em segundos. Tudo em um só lugar.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link to="/cadastro">
