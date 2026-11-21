@@ -1,7 +1,7 @@
-import { Bell, BellOff, BellRing, CheckCheck, Receipt, Settings, UtensilsCrossed } from 'lucide-react';
+import { Bell, BellOff, BellRing, CheckCheck, Copy, QrCode as QrCodeIcon, Receipt, Settings, Share2, UtensilsCrossed } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { useAgora } from '../../components/comuns';
+import { QrCode, useAgora } from '../../components/comuns';
 import { Abas, Aviso, Botao, Campo, Carregando, Entrada, Janela, Selo, cx, useAvisos } from '../../components/ui';
 import { api, mensagemDe, nomeSalvo } from '../../lib/api';
 import { FORMAS_PAGAMENTO, reais, tempoDesde } from '../../lib/formato';
@@ -44,6 +44,9 @@ export default function Garcom() {
   const [aba, setAba] = useState<Aba>('agora');
   const [fechar, setFechar] = useState<MesaGestao | null>(null);
   const [config, setConfig] = useState(false);
+  const [opcoesMesa, setOpcoesMesa] = useState<MesaGestao | null>(null);
+  const [escolherQr, setEscolherQr] = useState(false);
+  const [qrMesa, setQrMesa] = useState<number | null>(null);
 
   const carregar = useCallback(async () => {
     try {
@@ -133,6 +136,15 @@ export default function Garcom() {
             <p className="text-xs font-medium opacity-80">Garçom{nomeSalvo.ler() ? ` · ${nomeSalvo.ler()}` : ''}</p>
             <h1 className="truncate text-lg font-bold">{estado.restaurante}</h1>
           </div>
+          <button
+            type="button"
+            onClick={() => setEscolherQr(true)}
+            className="flex h-10 items-center gap-1.5 rounded-xl bg-white/15 px-3 text-sm font-semibold"
+            aria-label="Mostrar QR Code de uma mesa"
+          >
+            <QrCodeIcon className="h-5 w-5" />
+            QR da mesa
+          </button>
           <button type="button" onClick={() => setConfig(true)} className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15" aria-label="Avisos e nome">
             <Settings className="h-5 w-5" />
           </button>
@@ -201,8 +213,7 @@ export default function Garcom() {
               <button
                 key={m.numero}
                 type="button"
-                disabled={!s}
-                onClick={() => s && setFechar(m)}
+                onClick={() => setOpcoesMesa(m)}
                 className={cx(
                   'flex aspect-square flex-col items-center justify-center rounded-2xl border-2 p-2',
                   !s ? 'border-dashed border-stone-300 text-stone-400' : s.garcomChamadoEm ? 'border-marca bg-marca-clara' : s.status === 'fechamento_solicitado' ? 'border-sky-300 bg-sky-50' : 'border-stone-200 bg-white',
@@ -226,7 +237,135 @@ export default function Garcom() {
         />
       )}
       {config && <Configuracoes rid={rid} q={q} chave={estado.chavePublica} aoFechar={() => setConfig(false)} />}
+
+      {opcoesMesa && (
+        <Janela aberta aoFechar={() => setOpcoesMesa(null)} titulo={`Mesa ${opcoesMesa.numero}`} largura="max-w-sm">
+          <div className="space-y-2 pb-2">
+            {opcoesMesa.sessao && (
+              <p className="mb-3 text-sm text-stone-600">
+                Conta em aberto: <b>{reais(opcoesMesa.sessao.total)}</b>
+              </p>
+            )}
+            <Botao
+              largo
+              tamanho="g"
+              icone={<QrCodeIcon className="h-5 w-5" />}
+              onClick={() => {
+                setQrMesa(opcoesMesa.numero);
+                setOpcoesMesa(null);
+              }}
+            >
+              Mostrar QR Code da mesa
+            </Botao>
+            {opcoesMesa.sessao && (
+              <Botao
+                largo
+                tamanho="g"
+                variante="escuro"
+                icone={<Receipt className="h-5 w-5" />}
+                onClick={() => {
+                  setFechar(opcoesMesa);
+                  setOpcoesMesa(null);
+                }}
+              >
+                Fechar conta
+              </Botao>
+            )}
+          </div>
+        </Janela>
+      )}
+
+      {escolherQr && (
+        <Janela aberta aoFechar={() => setEscolherQr(false)} titulo="QR Code de qual mesa?" largura="max-w-sm">
+          <p className="mb-4 text-sm text-stone-600">Para mesas sem QR Code impresso: mostre o código na sua tela para o cliente ler com a câmera.</p>
+          <div className="grid grid-cols-4 gap-2 pb-2">
+            {mesas.map((m) => (
+              <button
+                key={m.numero}
+                type="button"
+                onClick={() => {
+                  setQrMesa(m.numero);
+                  setEscolherQr(false);
+                }}
+                className={cx(
+                  'flex aspect-square items-center justify-center rounded-xl border-2 text-xl font-extrabold transition active:scale-95',
+                  m.sessao ? 'border-stone-200 bg-white' : 'border-dashed border-stone-300 text-stone-500',
+                )}
+              >
+                {m.numero}
+              </button>
+            ))}
+          </div>
+        </Janela>
+      )}
+
+      {qrMesa != null && <QrDaMesa rid={rid} q={q} numero={qrMesa} restaurante={estado.restaurante} aoFechar={() => setQrMesa(null)} />}
     </div>
+  );
+}
+
+/** QR Code da mesa em tela cheia: o cliente lê direto da tela do garçom (mesa sem QR impresso). */
+function QrDaMesa({ rid, q, numero, restaurante, aoFechar }: { rid: string; q: string; numero: number; restaurante: string; aoFechar: () => void }) {
+  const { avisar } = useAvisos();
+  const [link, setLink] = useState('');
+  const [erro, setErro] = useState('');
+
+  useEffect(() => {
+    api
+      .get<{ numero: number; token: string }>(`/garcom/${rid}/mesas/${numero}/qrcode${q}`)
+      .then((m) => setLink(`${window.location.origin}/cliente/${rid}/mesa/${m.numero}?t=${encodeURIComponent(m.token)}`))
+      .catch((e) => setErro(mensagemDe(e)));
+  }, [rid, q, numero]);
+
+  const compartilhar = async () => {
+    const texto = `Cardápio da mesa ${numero} · ${restaurante}`;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: texto, text: `${texto}:`, url: link });
+        return;
+      } catch (e) {
+        if ((e as DOMException).name === 'AbortError') return;
+      }
+    }
+    window.open(`https://wa.me/?text=${encodeURIComponent(`${texto}: ${link}`)}`, '_blank', 'noopener');
+  };
+
+  return (
+    <Janela aberta aoFechar={aoFechar} titulo={`QR Code · Mesa ${numero}`} largura="max-w-md">
+      {erro ? (
+        <Aviso tipo="erro">{erro}</Aviso>
+      ) : !link ? (
+        <Carregando />
+      ) : (
+        <div className="flex flex-col items-center pb-2 text-center">
+          <p className="text-sm font-semibold uppercase tracking-wider text-stone-500">{restaurante}</p>
+          <p className="mb-3 text-3xl font-extrabold">Mesa {numero}</p>
+          <div className="rounded-3xl bg-white p-3 shadow-cartao ring-1 ring-stone-200">
+            <QrCode texto={link} tamanho={Math.min(300, window.innerWidth - 110)} />
+          </div>
+          <p className="mt-4 max-w-xs text-stone-600">Peça para o cliente apontar a câmera do celular para este código. O cardápio da mesa abre na hora.</p>
+          <div className="mt-5 grid w-full grid-cols-2 gap-2">
+            <Botao variante="secundario" icone={<Share2 className="h-4 w-4" />} onClick={compartilhar}>
+              Compartilhar
+            </Botao>
+            <Botao
+              variante="secundario"
+              icone={<Copy className="h-4 w-4" />}
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(link);
+                  avisar('Link da mesa copiado.');
+                } catch {
+                  avisar('Não foi possível copiar o link.', 'erro');
+                }
+              }}
+            >
+              Copiar link
+            </Botao>
+          </div>
+        </div>
+      )}
+    </Janela>
   );
 }
 
