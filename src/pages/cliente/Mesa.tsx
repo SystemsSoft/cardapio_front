@@ -7,6 +7,7 @@ import {
   Plus,
   Receipt,
   Search,
+  Share2,
   ShoppingBag,
   Trash2,
   UtensilsCrossed,
@@ -15,6 +16,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { Contador, ImagemProduto, useAgora } from '../../components/comuns';
+import { PainelQrMesa, linkDaMesa } from '../../components/QrMesa';
 import { AreaTexto, Aviso, Botao, Carregando, Entrada, Janela, Selo, cx, useAvisos } from '../../components/ui';
 import { api, mensagemDe, nomeSalvo } from '../../lib/api';
 import { reais, tempoDesde } from '../../lib/formato';
@@ -63,6 +65,7 @@ export default function Mesa() {
   const [aba, setAba] = useState<Aba>('cardapio');
   const [produtoAberto, setProdutoAberto] = useState<Produto | null>(null);
   const [carrinhoAberto, setCarrinhoAberto] = useState(false);
+  const [compartilhando, setCompartilhando] = useState(false);
   const [carrinho, setCarrinho] = useCarrinho(`cardapio:carrinho:${rid}:${numero}`);
 
   const q = `?t=${encodeURIComponent(token)}`;
@@ -150,7 +153,16 @@ export default function Mesa() {
 
   return (
     <div className="mx-auto min-h-dvh max-w-2xl bg-fundo pb-32">
-      <Cabecalho restaurante={restaurante} numero={numero} />
+      <Cabecalho restaurante={restaurante} numero={numero} aoCompartilhar={() => setCompartilhando(true)} />
+
+      <Janela aberta={compartilhando} aoFechar={() => setCompartilhando(false)} titulo="Compartilhar cardápio" largura="max-w-md">
+        <PainelQrMesa
+          link={linkDaMesa(rid, numero, token)}
+          restaurante={restaurante.nome}
+          numero={numero}
+          instrucao={`Quem está na mesa com você pode ler este código e pedir pelo próprio celular. Tudo vai para a mesma conta da mesa ${numero}.`}
+        />
+      </Janela>
 
       {sessao?.status === 'fechamento_solicitado' && (
         <div className="mx-4 mt-4">
@@ -227,7 +239,7 @@ export default function Mesa() {
   );
 }
 
-function Cabecalho({ restaurante, numero }: { restaurante: RestaurantePublico; numero: string }) {
+function Cabecalho({ restaurante, numero, aoCompartilhar }: { restaurante: RestaurantePublico; numero: string; aoCompartilhar: () => void }) {
   const { marca } = restaurante;
   return (
     <header>
@@ -238,7 +250,17 @@ function Cabecalho({ restaurante, numero }: { restaurante: RestaurantePublico; n
           <div className="h-full w-full bg-gradient-to-br from-marca to-marca-escura" />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
-        <span className="pt-seguro absolute right-4 top-3 rounded-full bg-white/95 px-3 py-1 text-sm font-bold text-stone-900 shadow">Mesa {numero}</span>
+        <div className="pt-seguro absolute right-4 top-3 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={aoCompartilhar}
+            className="flex items-center gap-1.5 rounded-full bg-white/95 px-3 py-1 text-sm font-semibold text-stone-900 shadow transition active:scale-95"
+          >
+            <Share2 className="h-4 w-4" />
+            Compartilhar cardápio
+          </button>
+          <span className="rounded-full bg-white/95 px-3 py-1 text-sm font-bold text-stone-900 shadow">Mesa {numero}</span>
+        </div>
       </div>
       {/* Só a logo sobe sobre a capa; nome e frase ficam abaixo dela, sem cobrir a foto. */}
       <div className="relative flex gap-3 px-4">

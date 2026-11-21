@@ -1,7 +1,8 @@
-import { Bell, BellOff, BellRing, CheckCheck, Copy, QrCode as QrCodeIcon, Receipt, Settings, Share2, UtensilsCrossed } from 'lucide-react';
+import { Bell, BellOff, BellRing, CheckCheck, QrCode as QrCodeIcon, Receipt, Settings, UtensilsCrossed } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { QrCode, useAgora } from '../../components/comuns';
+import { useAgora } from '../../components/comuns';
+import { PainelQrMesa, linkDaMesa } from '../../components/QrMesa';
 import { Abas, Aviso, Botao, Campo, Carregando, Entrada, Janela, Selo, cx, useAvisos } from '../../components/ui';
 import { api, mensagemDe, nomeSalvo } from '../../lib/api';
 import { FORMAS_PAGAMENTO, reais, tempoDesde } from '../../lib/formato';
@@ -306,29 +307,15 @@ export default function Garcom() {
 
 /** QR Code da mesa em tela cheia: o cliente lê direto da tela do garçom (mesa sem QR impresso). */
 function QrDaMesa({ rid, q, numero, restaurante, aoFechar }: { rid: string; q: string; numero: number; restaurante: string; aoFechar: () => void }) {
-  const { avisar } = useAvisos();
   const [link, setLink] = useState('');
   const [erro, setErro] = useState('');
 
   useEffect(() => {
     api
       .get<{ numero: number; token: string }>(`/garcom/${rid}/mesas/${numero}/qrcode${q}`)
-      .then((m) => setLink(`${window.location.origin}/cliente/${rid}/mesa/${m.numero}?t=${encodeURIComponent(m.token)}`))
+      .then((m) => setLink(linkDaMesa(rid, m.numero, m.token)))
       .catch((e) => setErro(mensagemDe(e)));
   }, [rid, q, numero]);
-
-  const compartilhar = async () => {
-    const texto = `Cardápio da mesa ${numero} · ${restaurante}`;
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: texto, text: `${texto}:`, url: link });
-        return;
-      } catch (e) {
-        if ((e as DOMException).name === 'AbortError') return;
-      }
-    }
-    window.open(`https://wa.me/?text=${encodeURIComponent(`${texto}: ${link}`)}`, '_blank', 'noopener');
-  };
 
   return (
     <Janela aberta aoFechar={aoFechar} titulo={`QR Code · Mesa ${numero}`} largura="max-w-md">
@@ -337,33 +324,12 @@ function QrDaMesa({ rid, q, numero, restaurante, aoFechar }: { rid: string; q: s
       ) : !link ? (
         <Carregando />
       ) : (
-        <div className="flex flex-col items-center pb-2 text-center">
-          <p className="text-sm font-semibold uppercase tracking-wider text-stone-500">{restaurante}</p>
-          <p className="mb-3 text-3xl font-extrabold">Mesa {numero}</p>
-          <div className="rounded-3xl bg-white p-3 shadow-cartao ring-1 ring-stone-200">
-            <QrCode texto={link} tamanho={Math.min(300, window.innerWidth - 110)} />
-          </div>
-          <p className="mt-4 max-w-xs text-stone-600">Peça para o cliente apontar a câmera do celular para este código. O cardápio da mesa abre na hora.</p>
-          <div className="mt-5 grid w-full grid-cols-2 gap-2">
-            <Botao variante="secundario" icone={<Share2 className="h-4 w-4" />} onClick={compartilhar}>
-              Compartilhar
-            </Botao>
-            <Botao
-              variante="secundario"
-              icone={<Copy className="h-4 w-4" />}
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(link);
-                  avisar('Link da mesa copiado.');
-                } catch {
-                  avisar('Não foi possível copiar o link.', 'erro');
-                }
-              }}
-            >
-              Copiar link
-            </Botao>
-          </div>
-        </div>
+        <PainelQrMesa
+          link={link}
+          restaurante={restaurante}
+          numero={numero}
+          instrucao="Peça para o cliente apontar a câmera do celular para este código. O cardápio da mesa abre na hora."
+        />
       )}
     </Janela>
   );
