@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --marca: 217 72 15;
+  --marca-escura: 163 54 11;
+  --marca-clara: 251 237 230;
+  color-scheme: light;
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+  }
+  body {
+    @apply bg-fundo text-stone-900 antialiased;
+    font-feature-settings: 'cv11', 'ss01';
+  }
+  input,
+  select,
+  textarea {
+    font-size: 16px; /* evita o zoom automático do iPhone ao focar */
+  }
+  @media (min-width: 768px) {
+    input,
+    select,
+    textarea {
+      font-size: 0.9375rem;
+    }
+  }
+}
+
+@layer components {
+  .campo {
+    @apply w-full rounded-xl border border-stone-300 bg-white px-3.5 py-2.5 text-stone-900 shadow-sm outline-none transition
+      placeholder:text-stone-400 focus:border-marca focus:ring-4 focus:ring-marca/15 disabled:bg-stone-100 disabled:text-stone-500;
+  }
+  .rotulo {
+    @apply mb-1.5 block text-sm font-medium text-stone-700;
+  }
+  .cartao {
+    @apply rounded-2xl border border-stone-200/80 bg-white shadow-cartao;
+  }
+  .rolagem-fina {
+    scrollbar-width: thin;
+  }
+  .sem-rolagem {
+    scrollbar-width: none;
+  }
+  .sem-rolagem::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+.pb-seguro {
+  padding-bottom: max(env(safe-area-inset-bottom), 0px);
+}
+.pt-seguro {
+  padding-top: env(safe-area-inset-top);
+}
+
+@media print {
+  .nao-imprimir {
+    display: none !important;
+  }
+  body {
+    background: white;
+  }
+  .quebra-pagina {
+    break-inside: avoid;
+  }
+}
