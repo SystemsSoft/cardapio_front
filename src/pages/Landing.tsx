@@ -89,7 +89,14 @@ export default function Landing() {
       <section id="video" className="bg-stone-950 py-16 text-white">
         <div className="mx-auto max-w-4xl px-5">
           <h2 className="text-center text-3xl font-extrabold tracking-tight">Veja funcionando</h2>
-          <video controls preload="none" poster="/landing/video-capa.jpg" className="mt-8 w-full rounded-2xl shadow-flutuante">
+          {/* O vídeo sempre cabe inteiro na tela: no máximo 80% da altura visível, sem cortar nem rolar. */}
+          <video
+            controls
+            playsInline
+            preload="none"
+            poster="/landing/video-capa.jpg"
+            className="mx-auto mt-8 block aspect-video w-full max-w-[min(100%,calc(80dvh*16/9))] rounded-2xl bg-black object-contain shadow-flutuante"
+          >
             <source src="/landing/video-apresentacao.mp4" type="video/mp4" />
           </video>
         </div>
