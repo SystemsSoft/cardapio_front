@@ -1,0 +1,63 @@
+# Deploy automático: todo push na branch master gera o build e publica em https://cardapioonline.online
+#
+# Precisa do secret DEPLOY_SSH_KEY (Settings → Secrets and variables → Actions) com a chave
+# privada de deploy. No servidor, essa chave só consegue rodar /opt/cardapio/deploy/publicar_front.sh,
+# que recebe o build, guarda backup do front anterior e confere se o site respondeu.
+
+name: Deploy
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+# Nunca dois deploys ao mesmo tempo; um push novo espera o anterior terminar.
+concurrency:
+  group: deploy-producao
+  cancel-in-progress: false
+
+env:
+  SERVIDOR: 54.236.57.171
+  USUARIO: ec2-user
+  # Chave pública do servidor (evita aceitar um servidor falso no lugar do verdadeiro).
+  HOST_KEY: "54.236.57.171 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP9C0yD1WlZjjztzqJxihkOTiBO8Gkmc7MFDGs/pMgtA"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Checar tipos
+        run: npm run typecheck
+
+      - name: Gerar build
+        run: npm run build
+
+      - name: Publicar no servidor
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          if [ -z "$DEPLOY_SSH_KEY" ]; then
+            echo "::error::Falta o secret DEPLOY_SSH_KEY no repositório."
+            exit 1
+          fi
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy
+          chmod 600 ~/.ssh/deploy
+          echo "$HOST_KEY" > ~/.ssh/known_hosts
+          tar -czf - -C dist . | ssh -i ~/.ssh/deploy -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes "$USUARIO@$SERVIDOR"
+
+      - name: Conferir o site
+        run: |
+          curl -fsS -o /dev/null https://cardapioonline.online/
+          curl -fsS https://cardapioonline.online/api/saude
