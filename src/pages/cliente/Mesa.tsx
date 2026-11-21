@@ -240,8 +240,9 @@ function Cabecalho({ restaurante, numero }: { restaurante: RestaurantePublico; n
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-black/10 to-transparent" />
         <span className="pt-seguro absolute right-4 top-3 rounded-full bg-white/95 px-3 py-1 text-sm font-bold text-stone-900 shadow">Mesa {numero}</span>
       </div>
-      <div className="relative -mt-10 flex items-end gap-3 px-4">
-        <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl border-4 border-fundo bg-white shadow-cartao">
+      {/* Só a logo sobe sobre a capa; nome e frase ficam abaixo dela, sem cobrir a foto. */}
+      <div className="relative flex gap-3 px-4">
+        <div className="-mt-10 h-20 w-20 shrink-0 overflow-hidden rounded-2xl border-4 border-fundo bg-white shadow-cartao">
           {marca.logo ? (
             <img src={marca.logo} alt={restaurante.nome} className="h-full w-full object-contain" />
           ) : (
@@ -250,7 +251,7 @@ function Cabecalho({ restaurante, numero }: { restaurante: RestaurantePublico; n
             </div>
           )}
         </div>
-        <div className="min-w-0 pb-1">
+        <div className="min-w-0 pt-2">
           <h1 className="truncate text-xl font-extrabold tracking-tight">{restaurante.nome}</h1>
           {marca.frase && <p className="truncate text-sm text-stone-600">{marca.frase}</p>}
         </div>

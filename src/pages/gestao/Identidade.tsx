@@ -109,15 +109,15 @@ export default function Identidade() {
               {marca.capa ? <img src={marca.capa} alt="" className="h-full w-full object-cover" /> : <div className="h-full w-full bg-gradient-to-br from-marca to-marca-escura" />}
               <span className="absolute right-3 top-3 rounded-full bg-white px-2 py-0.5 text-[11px] font-bold">Mesa 5</span>
             </div>
-            <div className="-mt-8 flex items-end gap-2 px-3">
-              <div className="h-16 w-16 overflow-hidden rounded-xl border-4 border-fundo bg-white">
+            <div className="flex gap-2 px-3">
+              <div className="-mt-8 h-16 w-16 shrink-0 overflow-hidden rounded-xl border-4 border-fundo bg-white">
                 {marca.logo ? (
                   <img src={marca.logo} alt="" className="h-full w-full object-contain" />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center bg-marca-clara text-2xl font-extrabold text-marca">{nome.slice(0, 1).toUpperCase()}</div>
                 )}
               </div>
-              <div className="min-w-0 pb-1">
+              <div className="min-w-0 pt-1.5">
                 <p className="truncate font-extrabold">{nome || 'Seu restaurante'}</p>
                 {frase && <p className="truncate text-xs text-stone-600">{frase}</p>}
               </div>
