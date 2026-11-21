@@ -115,8 +115,10 @@ function MesasDoFechamento({ fechamento, aoFechar }: { fechamento: Fechamento; a
       .catch((e) => setErro(mensagemDe(e)));
   }, [fechamento.id]);
 
+  // Conta dividida soma cada parte na sua forma de pagamento; senão, o total da mesa na forma única.
   const porForma = new Map<string, number>();
-  mesas?.forEach((s) => porForma.set(s.formaPagamento || 'Não informado', (porForma.get(s.formaPagamento || 'Não informado') ?? 0) + s.total));
+  const somar = (forma: string | null, valor: number) => porForma.set(forma || 'Não informado', (porForma.get(forma || 'Não informado') ?? 0) + valor);
+  mesas?.forEach((s) => (s.pagamentos?.length ? s.pagamentos.forEach((p) => somar(p.formaPagamento, p.valor)) : somar(s.formaPagamento, s.total)));
 
   return (
     <Janela aberta aoFechar={aoFechar} titulo={`Caixa de ${dataHora(fechamento.abertoEm)}`}>

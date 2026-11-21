@@ -2,10 +2,11 @@ import { Bell, BellOff, BellRing, CheckCheck, QrCode as QrCodeIcon, Receipt, Set
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useAgora } from '../../components/comuns';
+import { JanelaFechamento } from '../../components/FechamentoConta';
 import { PainelQrMesa, linkDaMesa } from '../../components/QrMesa';
 import { Abas, Aviso, Botao, Campo, Carregando, Entrada, Janela, Selo, cx, useAvisos } from '../../components/ui';
 import { api, mensagemDe, nomeSalvo } from '../../lib/api';
-import { FORMAS_PAGAMENTO, ROTULO_STATUS, reais, tempoDesde } from '../../lib/formato';
+import { ROTULO_STATUS, reais, tempoDesde } from '../../lib/formato';
 import { aplicarMarca } from '../../lib/marca';
 import { liberarSom, tocar } from '../../lib/som';
 import { useTempoReal } from '../../lib/tempoReal';
@@ -240,13 +241,26 @@ export default function Garcom() {
       )}
 
       {fechar?.sessao && (
-        <FecharMesa
-          mesa={fechar}
+        <JanelaFechamento
+          titulo={`Fechar conta · Mesa ${fechar.numero}`}
+          sessao={fechar.sessao}
           caixaAberto={estado.caixaAberto !== false}
-          aoFechar={() => setFechar(null)}
-          aoConfirmar={(forma) =>
-            acao(() => api.post(`/garcom/${rid}/mesas/${fechar.numero}/fechar${q}`, { formaPagamento: forma, garcom: nomeSalvo.ler() || '' }), `Mesa ${fechar.numero} fechada.`).then(() => setFechar(null))
+          avisoCaixaFechado={
+            <Aviso tipo="alerta" titulo="O caixa está fechado">
+              Peça ao gerente para abrir o caixa antes de fechar a conta.
+            </Aviso>
           }
+          aoFechar={() => setFechar(null)}
+          aoConfirmar={async (dados) => {
+            try {
+              await api.post(`/garcom/${rid}/mesas/${fechar.numero}/fechar${q}`, { ...dados, garcom: nomeSalvo.ler() || '' });
+              avisar(`Mesa ${fechar.numero} fechada.`);
+              setFechar(null);
+              carregar();
+            } catch (e) {
+              avisar(mensagemDe(e), 'erro');
+            }
+          }}
         />
       )}
       {config && <Configuracoes rid={rid} q={q} chave={estado.chavePublica} aoFechar={() => setConfig(false)} />}
@@ -381,81 +395,6 @@ function Linha({ mesa, detalhe, destaque, children }: { mesa: number; detalhe: R
       <p className="min-w-0 flex-1 text-sm text-stone-700">{detalhe}</p>
       {children}
     </div>
-  );
-}
-
-function FecharMesa({
-  mesa,
-  caixaAberto,
-  aoFechar,
-  aoConfirmar,
-}: {
-  mesa: MesaGestao;
-  caixaAberto: boolean;
-  aoFechar: () => void;
-  aoConfirmar: (forma: string) => Promise<void>;
-}) {
-  const [forma, setForma] = useState('');
-  const [enviando, setEnviando] = useState(false);
-  const s = mesa.sessao!;
-  return (
-    <Janela
-      aberta
-      aoFechar={aoFechar}
-      titulo={`Mesa ${mesa.numero}`}
-      rodape={
-        !caixaAberto ? (
-          <Aviso tipo="alerta" titulo="O caixa está fechado">
-            Peça ao gerente para abrir o caixa antes de fechar a conta.
-          </Aviso>
-        ) : (
-        <Botao
-          largo
-          tamanho="g"
-          variante="sucesso"
-          disabled={!forma}
-          carregando={enviando}
-          onClick={async () => {
-            setEnviando(true);
-            await aoConfirmar(forma);
-            setEnviando(false);
-          }}
-        >
-          Fechar conta · {reais(s.total)}
-        </Botao>
-        )
-      }
-    >
-      <div className="mb-4 rounded-xl bg-stone-50 p-4 text-sm">
-        {s.pedidos
-          .filter((p) => p.status !== 'cancelado')
-          .flatMap((p) => p.itens)
-          .map((i) => (
-            <p key={i.id} className="flex justify-between">
-              <span>
-                {i.quantidade}× {i.nome}
-              </span>
-              <span>{reais(i.total)}</span>
-            </p>
-          ))}
-        <p className="mt-2 flex justify-between border-t border-stone-200 pt-2 text-stone-600">
-          <span>Serviço ({s.taxaServicoPercentual}%)</span>
-          <span>{reais(s.taxaServico)}</span>
-        </p>
-        <p className="flex justify-between text-base font-bold">
-          <span>Total</span>
-          <span>{reais(s.total)}</span>
-        </p>
-      </div>
-      <p className="mb-2 text-sm font-semibold">Como o cliente pagou?</p>
-      <div className="grid grid-cols-2 gap-2">
-        {FORMAS_PAGAMENTO.map((f) => (
-          <button key={f} type="button" onClick={() => setForma(f)} className={cx('rounded-xl border px-3 py-3 text-sm font-semibold', forma === f ? 'border-marca bg-marca-clara text-marca-escura' : 'border-stone-200')}>
-            {f}
-          </button>
-        ))}
-      </div>
-    </Janela>
   );
 }
 

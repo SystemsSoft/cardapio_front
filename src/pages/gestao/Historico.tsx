@@ -100,6 +100,19 @@ export default function Historico() {
                       <span>Subtotal {reais(s.subtotal)} + serviço {reais(s.taxaServico)}</span>
                       <b className="text-stone-900">{reais(s.total)}</b>
                     </p>
+                    {!!s.pagamentos?.length && (
+                      <div className="mt-2 rounded-lg bg-white p-2.5">
+                        <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-stone-500">Conta dividida</p>
+                        {s.pagamentos.map((p, i) => (
+                          <p key={i} className="flex justify-between gap-2">
+                            <span>
+                              {p.nome} <span className="text-stone-500">· {p.formaPagamento}</span>
+                            </span>
+                            <span className="font-semibold">{reais(p.valor)}</span>
+                          </p>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

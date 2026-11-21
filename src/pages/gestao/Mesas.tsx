@@ -2,9 +2,10 @@ import { BellRing, Clock, Lock, LockOpen, Receipt, Wallet } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAgora } from '../../components/comuns';
+import { JanelaFechamento, type DadosFechamento } from '../../components/FechamentoConta';
 import { Abas, Aviso, Botao, Carregando, Janela, Selo, Titulo, Vazio, cx, useAvisos } from '../../components/ui';
 import { gestao, mensagemDe } from '../../lib/api';
-import { FORMAS_PAGAMENTO, dataHora, hora, plural, reais, tempoDesde } from '../../lib/formato';
+import { dataHora, hora, plural, reais, tempoDesde } from '../../lib/formato';
 import type { ConfigFiscal, Fechamento, MesaGestao, Sessao } from '../../lib/tipos';
 import { CartaoPedido, JanelaEmitirNota } from './compartilhado';
 import { useGestao } from './contexto';
@@ -246,8 +247,6 @@ function DetalheMesa({
   aoFecharConta: (s: Sessao) => void;
 }) {
   const { avisar } = useAvisos();
-  const [forma, setForma] = useState<string>('');
-  const [fechando, setFechando] = useState(false);
   const [modoFechar, setModoFechar] = useState(false);
   const s = mesa.sessao;
 
@@ -259,18 +258,19 @@ function DetalheMesa({
     }
   };
 
-  const fechar = async () => {
-    setFechando(true);
+  const fechar = async (dados: DadosFechamento) => {
     try {
-      const resumo = await gestao.post<Sessao>(`/mesas/${mesa.numero}/fechar`, { formaPagamento: forma });
-      avisar(`Mesa ${mesa.numero} fechada · ${reais(resumo.total)}`);
+      const resumo = await gestao.post<Sessao>(`/mesas/${mesa.numero}/fechar`, dados);
+      avisar(`Mesa ${mesa.numero} fechada · ${reais(resumo.total)}${resumo.pagamentos?.length ? ` · dividida em ${resumo.pagamentos.length}` : ''}`);
       aoFecharConta(resumo);
     } catch (e) {
       avisar(mensagemDe(e), 'erro');
-    } finally {
-      setFechando(false);
     }
   };
+
+  if (modoFechar && s) {
+    return <JanelaFechamento titulo={`Fechar conta · Mesa ${mesa.numero}`} sessao={s} aoFechar={() => setModoFechar(false)} aoConfirmar={fechar} />;
+  }
 
   return (
     <Janela
@@ -279,32 +279,7 @@ function DetalheMesa({
       titulo={`Mesa ${mesa.numero}`}
       largura="max-w-2xl"
       rodape={
-        s &&
-        (modoFechar ? (
-          <div className="space-y-3">
-            <p className="text-sm font-semibold">Forma de pagamento</p>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-              {FORMAS_PAGAMENTO.map((f) => (
-                <button
-                  key={f}
-                  type="button"
-                  onClick={() => setForma(f)}
-                  className={cx('rounded-xl border px-2 py-2 text-sm font-semibold transition', forma === f ? 'border-marca bg-marca-clara text-marca-escura' : 'border-stone-200 hover:bg-stone-50')}
-                >
-                  {f}
-                </button>
-              ))}
-            </div>
-            <div className="flex gap-2">
-              <Botao variante="secundario" onClick={() => setModoFechar(false)}>
-                Voltar
-              </Botao>
-              <Botao largo variante="sucesso" disabled={!forma} carregando={fechando} onClick={fechar}>
-                Confirmar · {reais(s.total)}
-              </Botao>
-            </div>
-          </div>
-        ) : (
+        s && (
           <div className="flex flex-wrap gap-2">
             {s.garcomChamadoEm && (
               <Botao variante="secundario" icone={<BellRing className="h-4 w-4" />} onClick={atender}>
@@ -324,7 +299,7 @@ function DetalheMesa({
               </div>
             )}
           </div>
-        ))
+        )
       }
     >
       {!s ? (

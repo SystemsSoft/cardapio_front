@@ -113,6 +113,8 @@ export interface Sessao {
   fechamentoSolicitadoEm: string | null;
   fechadaEm: string | null;
   formaPagamento: string | null;
+  /** Conta dividida entre as pessoas (vazio = paga de uma vez, em formaPagamento). */
+  pagamentos?: { nome: string; formaPagamento: string; valor: number }[];
   garcomChamadoEm: string | null;
   pedidos: Pedido[];
   subtotal: number;
