@@ -282,7 +282,7 @@ function Cabecalho({ restaurante, numero, aoCompartilhar }: { restaurante: Resta
   );
 }
 
-function ListaCardapio({ cardapio, aoAbrir }: { cardapio: Categoria[]; aoAbrir: (p: Produto) => void }) {
+export function ListaCardapio({ cardapio, aoAbrir }: { cardapio: Categoria[]; aoAbrir: (p: Produto) => void }) {
   const [termo, setTermo] = useState('');
   const [ativa, setAtiva] = useState<number | null>(null);
   const secoes = useRef<Record<number, HTMLElement | null>>({});
@@ -409,7 +409,7 @@ function CartaoProduto({ produto: p, aoAbrir }: { produto: Produto; aoAbrir: () 
   );
 }
 
-function FolhaProduto({
+export function FolhaProduto({
   produto,
   aoFechar,
   aoAdicionar,

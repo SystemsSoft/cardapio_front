@@ -1,4 +1,4 @@
-import { Bell, BellOff, BellRing, CheckCheck, QrCode as QrCodeIcon, Receipt, Settings, UtensilsCrossed } from 'lucide-react';
+import { Bell, BellOff, BellRing, CheckCheck, NotebookPen, QrCode as QrCodeIcon, Receipt, Settings, UtensilsCrossed } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useAgora } from '../../components/comuns';
@@ -11,6 +11,7 @@ import { aplicarMarca } from '../../lib/marca';
 import { liberarSom, tocar } from '../../lib/som';
 import { useTempoReal } from '../../lib/tempoReal';
 import type { Marca, MesaGestao, Pedido } from '../../lib/tipos';
+import PedidoGarcom from './PedidoGarcom';
 
 interface Estado {
   restaurante: string;
@@ -49,8 +50,10 @@ export default function Garcom() {
   const [fechar, setFechar] = useState<MesaGestao | null>(null);
   const [config, setConfig] = useState(false);
   const [opcoesMesa, setOpcoesMesa] = useState<MesaGestao | null>(null);
-  const [escolherQr, setEscolherQr] = useState(false);
+  // Escolha de mesa para mostrar o QR Code ou para lançar um pedido.
+  const [escolherMesa, setEscolherMesa] = useState<'qr' | 'pedido' | null>(null);
   const [qrMesa, setQrMesa] = useState<number | null>(null);
+  const [pedidoMesa, setPedidoMesa] = useState<number | null>(null);
 
   const carregar = useCallback(async () => {
     try {
@@ -114,6 +117,19 @@ export default function Garcom() {
       </div>
     );
   if (!estado) return <Carregando tela />;
+  if (pedidoMesa != null)
+    return (
+      <PedidoGarcom
+        rid={rid}
+        q={q}
+        numero={pedidoMesa}
+        aoSair={() => setPedidoMesa(null)}
+        aoEnviar={() => {
+          setPedidoMesa(null);
+          carregar();
+        }}
+      />
+    );
 
   const mesas = estado.mesas;
   const chamando = mesas.filter((m) => m.sessao?.garcomChamadoEm);
@@ -133,7 +149,7 @@ export default function Garcom() {
   const mesaDe = (p: Pedido) => p.mesa;
 
   return (
-    <div className="mx-auto min-h-dvh max-w-2xl pb-10">
+    <div className="mx-auto min-h-dvh max-w-2xl pb-28">
       <header className="pt-seguro sticky top-0 z-20 bg-marca text-white shadow">
         <div className="flex items-center gap-3 px-4 py-3">
           <div className="min-w-0 flex-1">
@@ -142,7 +158,7 @@ export default function Garcom() {
           </div>
           <button
             type="button"
-            onClick={() => setEscolherQr(true)}
+            onClick={() => setEscolherMesa('qr')}
             className="flex h-10 items-center gap-1.5 rounded-xl bg-white/15 px-3 text-sm font-semibold"
             aria-label="Mostrar QR Code de uma mesa"
           >
@@ -291,6 +307,18 @@ export default function Garcom() {
             <Botao
               largo
               tamanho="g"
+              icone={<NotebookPen className="h-5 w-5" />}
+              onClick={() => {
+                setPedidoMesa(opcoesMesa.numero);
+                setOpcoesMesa(null);
+              }}
+            >
+              Fazer pedido
+            </Botao>
+            <Botao
+              largo
+              tamanho="g"
+              variante="secundario"
               icone={<QrCodeIcon className="h-5 w-5" />}
               onClick={() => {
                 setQrMesa(opcoesMesa.numero);
@@ -317,17 +345,22 @@ export default function Garcom() {
         </Janela>
       )}
 
-      {escolherQr && (
-        <Janela aberta aoFechar={() => setEscolherQr(false)} titulo="QR Code de qual mesa?" largura="max-w-sm">
-          <p className="mb-4 text-sm text-stone-600">Para mesas sem QR Code impresso: mostre o código na sua tela para o cliente ler com a câmera.</p>
+      {escolherMesa && (
+        <Janela aberta aoFechar={() => setEscolherMesa(null)} titulo={escolherMesa === 'qr' ? 'QR Code de qual mesa?' : 'Pedido para qual mesa?'} largura="max-w-sm">
+          <p className="mb-4 text-sm text-stone-600">
+            {escolherMesa === 'qr'
+              ? 'Para mesas sem QR Code impresso: mostre o código na sua tela para o cliente ler com a câmera.'
+              : 'Anote o pedido do cliente pelo seu celular. Ele vai direto para a cozinha.'}
+          </p>
           <div className="grid grid-cols-4 gap-2 pb-2">
             {mesas.map((m) => (
               <button
                 key={m.numero}
                 type="button"
                 onClick={() => {
-                  setQrMesa(m.numero);
-                  setEscolherQr(false);
+                  if (escolherMesa === 'qr') setQrMesa(m.numero);
+                  else setPedidoMesa(m.numero);
+                  setEscolherMesa(null);
                 }}
                 className={cx(
                   'flex aspect-square items-center justify-center rounded-xl border-2 text-xl font-extrabold transition active:scale-95',
@@ -340,6 +373,13 @@ export default function Garcom() {
           </div>
         </Janela>
       )}
+
+      {/* Atalho: lançar um pedido para qualquer mesa. */}
+      <div className="pb-seguro fixed inset-x-0 bottom-4 z-30 mx-auto max-w-2xl px-4">
+        <Botao largo tamanho="g" icone={<NotebookPen className="h-5 w-5" />} className="shadow-flutuante shadow-marca/40" onClick={() => setEscolherMesa('pedido')}>
+          Novo pedido
+        </Botao>
+      </div>
 
       {qrMesa != null && <QrDaMesa rid={rid} q={q} numero={qrMesa} restaurante={estado.restaurante} aoFechar={() => setQrMesa(null)} />}
     </div>
