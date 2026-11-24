@@ -90,6 +90,8 @@ export interface ItemPedido {
   quantidade: number;
   observacao: string;
   total: number;
+  /** Garçom marcou como entregue na mesa. */
+  entregue?: boolean;
 }
 
 export interface Pedido {
