@@ -260,12 +260,16 @@ export function JanelaFechamento({
               disabled={pctLido == null || cpfErrado || (dividir ? !divisaoOk : !formaJunto)}
               onClick={confirmar}
             >
-              <span className="hidden sm:inline">
-                {dividir ? 'Fechar conta dividida' : 'Fechar conta'}
-                {emitir ? ' e emitir nota' : ''}
+              {/* Um só bloco de texto: o Botao separa os filhos com espaço, o que abria um vão antes do "·". */}
+              <span>
+                <span className="hidden sm:inline">
+                  {dividir ? 'Fechar conta dividida' : 'Fechar conta'}
+                  {emitir ? ' e emitir nota' : ''}
+                </span>
+                <span className="sm:hidden">{emitir ? 'Fechar e emitir nota' : dividir ? 'Fechar conta dividida' : 'Fechar conta'}</span>
+                {' · '}
+                {reais(total)}
               </span>
-              <span className="sm:hidden">{emitir ? 'Fechar e emitir nota' : dividir ? 'Fechar conta dividida' : 'Fechar conta'}</span>
-              &nbsp;· {reais(total)}
             </Botao>
           </div>
         )

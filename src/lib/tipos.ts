@@ -166,6 +166,8 @@ export interface EstadoGestao {
     ultimoFechamentoEm: string | null;
   };
   estoque: { controlados: number; esgotados: number; baixos: number };
+  /** Pedidos de entrega ainda não iniciados (aviso no menu "Entregas"). */
+  entregasNovas?: number;
 }
 
 export interface NotaResumo {
@@ -362,4 +364,34 @@ export interface RestauranteAdmin extends Restaurante {
     celularesGarcom: number;
     vendas30d: number;
   };
+}
+
+// ---------- Delivery ----------
+export type StatusEntrega = 'recebido' | 'preparando' | 'saiu' | 'entregue' | 'cancelado';
+
+export interface Entrega {
+  id: number;
+  codigo: string;
+  clienteNome: string;
+  telefone: string;
+  endereco: string;
+  complemento: string;
+  bairro: string;
+  referencia: string;
+  formaPagamento: string;
+  trocoPara: number | null;
+  observacao: string;
+  subtotal: number;
+  taxaEntrega: number;
+  total: number;
+  status: StatusEntrega;
+  criadoEm: string;
+  atualizadoEm: string;
+  itens: ItemPedido[];
+}
+
+export interface ConfigEntregas {
+  ativas: boolean;
+  taxaEntrega: number;
+  formasPagamento: string[];
 }

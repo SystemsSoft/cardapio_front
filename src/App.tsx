@@ -12,6 +12,9 @@ const Admin = lazy(() => import('./pages/admin/Admin'));
 const LayoutGestao = lazy(() => import('./pages/gestao/Layout'));
 const Mesas = lazy(() => import('./pages/gestao/Mesas'));
 const Pedidos = lazy(() => import('./pages/gestao/Pedidos'));
+const Entregas = lazy(() => import('./pages/gestao/Entregas'));
+const Entrega = lazy(() => import('./pages/entrega/Entrega'));
+const AcompanharEntrega = lazy(() => import('./pages/entrega/Entrega').then((m) => ({ default: m.AcompanharEntrega })));
 const Garcons = lazy(() => import('./pages/gestao/Garcons'));
 const Historico = lazy(() => import('./pages/gestao/Historico'));
 const Caixa = lazy(() => import('./pages/gestao/Caixa'));
@@ -38,11 +41,15 @@ export default function App() {
             {/* Mesmos endereços dos QR Codes já impressos */}
             <Route path="/cliente/:rid/mesa/:numero" element={<Mesa />} />
             <Route path="/garcom/:rid" element={<Garcom />} />
+            {/* Delivery: link e QR Code de entrega */}
+            <Route path="/entrega/:rid" element={<Entrega />} />
+            <Route path="/entrega/:rid/pedido/:codigo" element={<AcompanharEntrega />} />
             <Route path="/admin" element={<Admin />} />
             <Route path="/gestao" element={<LayoutGestao />}>
               <Route index element={<Navigate to="mesas" replace />} />
               <Route path="mesas" element={<Pagina><Mesas /></Pagina>} />
               <Route path="pedidos" element={<Pagina><Pedidos /></Pagina>} />
+              <Route path="entregas" element={<Pagina><Entregas /></Pagina>} />
               <Route path="garcons" element={<Pagina><Garcons /></Pagina>} />
               <Route path="historico" element={<Pagina><Historico /></Pagina>} />
               <Route path="caixa" element={<Pagina><Caixa /></Pagina>} />

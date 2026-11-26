@@ -1,5 +1,6 @@
 import {
   Armchair,
+  Bike,
   BookOpen,
   Boxes,
   Camera,
@@ -121,6 +122,10 @@ export default function LayoutGestao() {
         } else if (e.tipo === 'fechamento-solicitado') {
           tocar('conta');
           avisar(`🧾 Mesa ${e.mesa} pediu a conta`, 'info');
+        } else if (e.tipo === 'nova-entrega') {
+          tocar('pedido');
+          const ent = (e as { entrega?: { id: number; clienteNome: string } }).entrega;
+          avisar(`🛵 Novo pedido de entrega${ent ? ` · #${ent.id} · ${ent.clienteNome}` : ''}`, 'info');
         } else if (e.tipo === 'mesa-fechada' && e.por) {
           avisar(`Mesa ${e.mesa} fechada pelo ${e.por}`, 'info');
         }
@@ -144,6 +149,7 @@ export default function LayoutGestao() {
       prontos: pedidos.filter((p) => p.status === 'pronto').length,
       alertasMesa: mesas.filter((m) => m.sessao?.garcomChamadoEm || m.sessao?.status === 'fechamento_solicitado').length,
       estoque: (estado?.estoque.esgotados ?? 0) + (estado?.estoque.baixos ?? 0),
+      entregas: estado?.entregasNovas ?? 0,
     };
   }, [estado]);
 
@@ -156,6 +162,7 @@ export default function LayoutGestao() {
       itens: [
         { to: 'mesas', rotulo: 'Mesas', icone: Armchair, badge: contagens.alertasMesa, alerta: true },
         { to: 'pedidos', rotulo: 'Pedidos', icone: ClipboardList, badge: contagens.novos, alerta: true },
+        { to: 'entregas', rotulo: 'Entregas', icone: Bike, badge: contagens.entregas, alerta: true },
         { to: 'garcons', rotulo: 'Garçons', icone: Users },
         { to: 'historico', rotulo: 'Histórico', icone: History },
         { to: 'caixa', rotulo: 'Fechamentos de caixa', icone: Wallet },
