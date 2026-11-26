@@ -75,10 +75,14 @@ export interface Produto {
   adicionais?: Adicional[];
 }
 
+/** Adicional = outro produto do cardápio (id é o id desse produto). Sem preço no produto = grátis. */
 export interface Adicional {
   id: number;
   nome: string;
   preco: number;
+  categoriaId?: number;
+  /** Falso quando o produto do adicional está pausado ou esgotado (não aparece para pedir). */
+  disponivel?: boolean;
 }
 
 export interface Categoria {
@@ -98,7 +102,7 @@ export interface ItemPedido {
   quantidade: number;
   observacao: string;
   /** Adicionais escolhidos (cópia do nome e preço da época do pedido). */
-  adicionais?: { nome: string; preco: number }[];
+  adicionais?: { produtoId?: number; nome: string; preco: number }[];
   /** Soma dos adicionais por unidade (já incluída em total). */
   precoAdicionais?: number;
   total: number;

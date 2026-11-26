@@ -162,6 +162,7 @@ export default function Cardapio() {
       {editando && (
         <EditorProduto
           produto={editando === 'novo' ? null : editando}
+          cardapio={cardapio ?? []}
           categoriaInicial={categoriaNova}
           aoFechar={() => setEditando(null)}
           aoSalvar={() => {
@@ -188,12 +189,14 @@ export default function Cardapio() {
 
 function EditorProduto({
   produto,
+  cardapio,
   categoriaInicial,
   aoFechar,
   aoSalvar,
   aoExcluir,
 }: {
   produto: Produto | null;
+  cardapio: Categoria[];
   categoriaInicial?: number;
   aoFechar: () => void;
   aoSalvar: () => void;
@@ -210,12 +213,10 @@ function EditorProduto({
   const [foto, setFoto] = useState<File | null>(null);
   const [previa, setPrevia] = useState<string | null>(null);
   const [disponivel, setDisponivel] = useState(produto?.disponivel ?? true);
-  // Adicionais (ex.: molho extra): nome + preço opcional (em branco = grátis). `id` mantém os já salvos.
-  const [adicionais, setAdicionais] = useState(() =>
-    (produto?.adicionais ?? []).map((a) => ({ chave: a.id, id: a.id as number | undefined, nome: a.nome, preco: a.preco ? textoDosCentavos(a.preco) : '' })),
-  );
-  const mudarAdicional = (chave: number, campo: 'nome' | 'preco', valor: string) =>
-    setAdicionais((lista) => lista.map((a) => (a.chave === chave ? { ...a, [campo]: valor } : a)));
+  // Adicionais: outros produtos do cardápio (ex.: o molho especial cadastrado em "Molhos"). Guarda os ids.
+  const [adicionais, setAdicionais] = useState<number[]>(() => (produto?.adicionais ?? []).map((a) => a.id));
+  const [escolhendoAdicionais, setEscolhendoAdicionais] = useState(false);
+  const porId = useMemo(() => new Map(cardapio.flatMap((c) => c.produtos.map((p) => [p.id, { produto: p, categoria: c.nome }] as const))), [cardapio]);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
   const arquivo = useRef<HTMLInputElement>(null);
@@ -244,15 +245,7 @@ function EditorProduto({
     const centavos = centavosDoTexto(preco);
     if (preco.trim() && centavos == null) return setErro('Preço inválido.');
     const corpo: Record<string, unknown> = { nome, descricao, preco: centavos, disponivel, imagem: foto ? produto?.imagem || '🍽️' : imagem };
-    const listaAdicionais = [];
-    for (const a of adicionais) {
-      if (!a.nome.trim() && !a.preco.trim()) continue; // linha vazia: ignora
-      if (!a.nome.trim()) return setErro('Dê um nome a cada adicional (ou remova o que estiver em branco).');
-      const p = a.preco.trim() ? centavosDoTexto(a.preco) : 0;
-      if (p == null) return setErro(`Preço inválido no adicional “${a.nome.trim()}”.`);
-      listaAdicionais.push({ id: a.id, nome: a.nome.trim(), preco: p });
-    }
-    corpo.adicionais = listaAdicionais;
+    corpo.adicionais = adicionais.filter((id) => porId.has(id));
     if (categoria.startsWith('id:')) corpo.categoriaId = Number(categoria.slice(3));
     else if (categoria.startsWith('nome:')) corpo.categoriaNome = categoria.slice(5);
     else if (categoriaTexto.trim()) corpo.categoriaNome = categoriaTexto.trim();
@@ -396,49 +389,51 @@ function EditorProduto({
             <p className="text-sm font-medium text-stone-700">Adicionais</p>
             <p className="text-xs text-stone-500">Quem pede escolhe se quer cada um</p>
           </div>
-          {adicionais.length > 0 ? (
-            <ul className="space-y-2">
-              {adicionais.map((a) => (
-                <li key={a.chave} className="flex items-center gap-2">
-                  <Entrada
-                    value={a.nome}
-                    onChange={(e) => mudarAdicional(a.chave, 'nome', e.target.value)}
-                    maxLength={60}
-                    placeholder="Ex.: Molho especial"
-                    aria-label="Nome do adicional"
-                    className="min-w-0 flex-1"
-                  />
-                  <div className="relative w-[6.5rem] shrink-0">
-                    <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-stone-500">+R$</span>
-                    <Entrada
-                      value={a.preco}
-                      onChange={(e) => mudarAdicional(a.chave, 'preco', e.target.value)}
-                      inputMode="decimal"
-                      placeholder="grátis"
-                      aria-label={`Preço de ${a.nome || 'adicional'}`}
-                      className="pl-10 pr-2"
-                    />
-                  </div>
-                  <BotaoIcone rotulo="Remover adicional" className="shrink-0" onClick={() => setAdicionais((lista) => lista.filter((x) => x.chave !== a.chave))}>
-                    <Trash2 className="h-4 w-4" />
-                  </BotaoIcone>
-                </li>
-              ))}
+          {adicionais.filter((id) => porId.has(id)).length > 0 ? (
+            <ul className="divide-y divide-stone-100 rounded-xl border border-stone-200">
+              {adicionais
+                .filter((id) => porId.has(id))
+                .map((id) => {
+                  const { produto: a, categoria: cat } = porId.get(id)!;
+                  const fora = !a.disponivel || a.esgotado;
+                  return (
+                    <li key={id} className="flex items-center gap-3 px-3 py-2">
+                      <ImagemProduto imagem={a.imagem} nome={a.nome} className="h-9 w-9 shrink-0 rounded-lg text-[0.7rem]" />
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold">{a.nome}</p>
+                        <p className="truncate text-xs text-stone-500">
+                          {cat}
+                          {fora && <span className="font-semibold text-amber-700"> · fora de venda (não aparece para pedir)</span>}
+                        </p>
+                      </div>
+                      <span className={cx('shrink-0 text-sm font-semibold', a.preco ? 'text-stone-700' : 'text-emerald-700')}>{a.preco ? `+ ${reais(a.preco)}` : 'grátis'}</span>
+                      <BotaoIcone rotulo={`Remover ${a.nome}`} className="shrink-0" onClick={() => setAdicionais((l) => l.filter((x) => x !== id))}>
+                        <Trash2 className="h-4 w-4" />
+                      </BotaoIcone>
+                    </li>
+                  );
+                })}
             </ul>
           ) : (
-            <p className="rounded-xl border border-dashed border-stone-300 px-3 py-2.5 text-sm text-stone-500">
-              Nenhum adicional. Ex.: molho especial, bacon extra, borda recheada.
-            </p>
+            !escolhendoAdicionais && (
+              <p className="rounded-xl border border-dashed border-stone-300 px-3 py-2.5 text-sm text-stone-500">
+                Nenhum adicional. Escolha produtos já cadastrados, como um molho ou um bacon extra.
+              </p>
+            )
           )}
-          <Botao
-            tamanho="p"
-            variante="secundario"
-            className="mt-2"
-            icone={<Plus className="h-4 w-4" />}
-            onClick={() => setAdicionais((lista) => [...lista, { chave: Date.now(), id: undefined, nome: '', preco: '' }])}
-          >
-            Adicionar adicional
-          </Botao>
+          {escolhendoAdicionais ? (
+            <SeletorAdicionais
+              cardapio={cardapio}
+              excluirId={produto?.id}
+              selecionados={adicionais}
+              aoMudar={setAdicionais}
+              aoConcluir={() => setEscolhendoAdicionais(false)}
+            />
+          ) : (
+            <Botao tamanho="p" variante="secundario" className="mt-2" icone={<Plus className="h-4 w-4" />} onClick={() => setEscolhendoAdicionais(true)}>
+              Escolher produtos
+            </Botao>
+          )}
         </div>
 
         <div className="flex items-center justify-between rounded-xl bg-stone-50 px-4 py-3">
@@ -451,6 +446,89 @@ function EditorProduto({
         {erro && <Aviso tipo="erro">{erro}</Aviso>}
       </div>
     </Janela>
+  );
+}
+
+/** Escolhe adicionais entre os produtos já cadastrados, navegando pelas categorias (ou buscando pelo nome). */
+function SeletorAdicionais({
+  cardapio,
+  excluirId,
+  selecionados,
+  aoMudar,
+  aoConcluir,
+}: {
+  cardapio: Categoria[];
+  excluirId?: number;
+  selecionados: number[];
+  aoMudar: (ids: number[]) => void;
+  aoConcluir: () => void;
+}) {
+  const [categoria, setCategoria] = useState<number | 'todas'>('todas');
+  const [busca, setBusca] = useState('');
+  const termo = busca.trim().toLowerCase();
+  const categorias = cardapio.map((c) => ({ ...c, produtos: c.produtos.filter((p) => p.id !== excluirId) })).filter((c) => c.produtos.length);
+  const visiveis = categorias
+    .filter((c) => categoria === 'todas' || c.id === categoria)
+    .map((c) => ({ ...c, produtos: c.produtos.filter((p) => !termo || p.nome.toLowerCase().includes(termo)) }))
+    .filter((c) => c.produtos.length);
+  const alternar = (id: number) => aoMudar(selecionados.includes(id) ? selecionados.filter((x) => x !== id) : [...selecionados, id]);
+
+  return (
+    <div className="mt-2 space-y-3 rounded-xl border border-marca/30 bg-marca-clara/40 p-3">
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-400" />
+        <Entrada id="busca-adicional" value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar produto" className="pl-9" />
+      </div>
+      <div className="sem-rolagem -mx-1 flex gap-1.5 overflow-x-auto px-1 pb-0.5">
+        {[{ id: 'todas' as const, nome: 'Todas' }, ...categorias].map((c) => (
+          <button
+            key={c.id}
+            type="button"
+            onClick={() => setCategoria(c.id)}
+            className={cx(
+              'shrink-0 rounded-full px-3 py-1.5 text-sm font-semibold ring-1 transition',
+              categoria === c.id ? 'bg-marca text-white ring-marca' : 'bg-white text-stone-700 ring-stone-200 hover:bg-stone-50',
+            )}
+          >
+            {c.nome}
+          </button>
+        ))}
+      </div>
+      <div className="max-h-72 overflow-y-auto rounded-xl border border-stone-200 bg-white">
+        {!visiveis.length ? (
+          <p className="px-3 py-6 text-center text-sm text-stone-500">Nenhum produto encontrado.</p>
+        ) : (
+          visiveis.map((c) => (
+            <div key={c.id}>
+              <p className="sticky top-0 z-10 border-b border-stone-100 bg-stone-50 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-stone-500">{c.nome}</p>
+              <ul className="divide-y divide-stone-100">
+                {c.produtos.map((p) => {
+                  const marcado = selecionados.includes(p.id);
+                  return (
+                    <li key={p.id}>
+                      <label className={cx('flex cursor-pointer items-center gap-3 px-3 py-2 transition', marcado ? 'bg-marca-clara' : 'hover:bg-stone-50')}>
+                        <input type="checkbox" className="h-5 w-5 shrink-0 accent-[rgb(var(--marca))]" checked={marcado} onChange={() => alternar(p.id)} />
+                        <ImagemProduto imagem={p.imagem} nome={p.nome} className="h-9 w-9 shrink-0 rounded-lg text-[0.7rem]" />
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium">{p.nome}</span>
+                        <span className={cx('shrink-0 text-sm font-semibold', p.preco ? 'text-stone-700' : 'text-emerald-700')}>{p.preco ? `+ ${reais(p.preco)}` : 'grátis'}</span>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))
+        )}
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-sm text-stone-600">
+          {selecionados.length} {selecionados.length === 1 ? 'adicional escolhido' : 'adicionais escolhidos'}
+        </p>
+        <Botao tamanho="p" onClick={aoConcluir}>
+          Concluir
+        </Botao>
+      </div>
+    </div>
   );
 }
 

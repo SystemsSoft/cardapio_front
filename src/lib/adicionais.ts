@@ -3,7 +3,7 @@ import type { Adicional, Produto } from './tipos';
 /** Adicionais escolhidos que ainda existem no produto (um adicional removido do cardápio some do carrinho). */
 export function adicionaisEscolhidos(p: Produto, ids: number[] | undefined): Adicional[] {
   if (!ids?.length) return [];
-  return (p.adicionais ?? []).filter((a) => ids.includes(a.id));
+  return (p.adicionais ?? []).filter((a) => ids.includes(a.id) && a.disponivel !== false);
 }
 
 /** Preço de uma unidade do produto com os adicionais escolhidos. */

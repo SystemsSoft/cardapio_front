@@ -464,11 +464,11 @@ export function FolhaProduto({
       {produto.descricao && <p className="mt-1.5 text-stone-600">{produto.descricao}</p>}
       <p className="mt-3 text-lg font-bold">{reais(produto.preco)}</p>
       {produto.estoqueBaixo && <p className="mt-1 text-sm font-medium text-amber-700">Restam só {produto.estoque} unidades.</p>}
-      {!!produto.adicionais?.length && (
+      {!!produto.adicionais?.some((a) => a.disponivel !== false) && (
         <fieldset className="mt-5">
           <legend className="rotulo">Adicionais</legend>
           <div className="divide-y divide-stone-100 overflow-hidden rounded-xl border border-stone-200">
-            {produto.adicionais.map((a) => {
+            {produto.adicionais.filter((a) => a.disponivel !== false).map((a) => {
               const marcado = escolhidos.includes(a.id);
               return (
                 <label key={a.id} className={cx('flex cursor-pointer items-center gap-3 px-3.5 py-3 transition', marcado ? 'bg-marca-clara' : 'hover:bg-stone-50')}>
