@@ -14,11 +14,13 @@ export default function NotaFiscal() {
   const [config, setConfig] = useState<ConfigFiscal | null>(null);
   const [erro, setErro] = useState('');
 
-  useEffect(() => {
+  const recarregar = () =>
     gestao
       .get<ConfigFiscal>('/fiscal')
       .then(setConfig)
       .catch((e) => setErro(mensagemDe(e)));
+  useEffect(() => {
+    recarregar();
   }, []);
 
   if (!config) return erro ? <Aviso tipo="erro">{erro}</Aviso> : <Carregando />;
@@ -35,6 +37,21 @@ export default function NotaFiscal() {
         }
       />
       <PassoAPasso config={config} setConfig={setConfig} />
+      {!!config.sugestoesTributacao?.length && aba !== 'tributacao' && (
+        <Aviso
+          tipo="alerta"
+          className="mb-4"
+          titulo="Bebidas com tributação de comida"
+          acao={
+            <Botao tamanho="p" variante="secundario" onClick={() => setAba('tributacao')}>
+              Ver sugestões
+            </Botao>
+          }
+        >
+          {config.sugestoesTributacao.join(', ')} {config.sugestoesTributacao.length === 1 ? 'está' : 'estão'} no perfil de comida preparada. Refrigerante, cerveja e
+          água costumam ter substituição tributária: confira com o seu contador.
+        </Aviso>
+      )}
       <Abas<Aba>
         className="mb-4"
         atual={aba}
@@ -44,7 +61,7 @@ export default function NotaFiscal() {
           { valor: 'tributacao', rotulo: 'Tributação dos produtos' },
         ]}
       />
-      {aba === 'empresa' ? <Empresa config={config} setConfig={setConfig} /> : <TributacaoProdutos />}
+      {aba === 'empresa' ? <Empresa config={config} setConfig={setConfig} /> : <TributacaoProdutos aoMudar={recarregar} />}
     </>
   );
 }
@@ -385,7 +402,7 @@ function Certificado({ config, setConfig }: { config: ConfigFiscal; setConfig: (
 
 const ORIGENS = ['0 · Nacional', '1 · Estrangeira (importação direta)', '2 · Estrangeira (mercado interno)', '3 · Nacional, +40% importado', '4 · Nacional (processos básicos)', '5 · Nacional, até 40% importado', '6 · Estrangeira sem similar (direta)', '7 · Estrangeira sem similar (interno)', '8 · Nacional, +70% importado'];
 
-function TributacaoProdutos() {
+function TributacaoProdutos({ aoMudar }: { aoMudar: () => void }) {
   const { avisar, confirmar } = useAvisos();
   const [t, setT] = useState<Tributacao | null>(null);
   const [perfil, setPerfil] = useState<Partial<PerfilFiscal> | null>(null);
@@ -403,6 +420,7 @@ function TributacaoProdutos() {
     try {
       setT(await fn());
       if (msg) avisar(msg);
+      aoMudar(); // atualiza o aviso de sugestões no topo
     } catch (e) {
       avisar(mensagemDe(e), 'erro');
     }
@@ -462,6 +480,25 @@ function TributacaoProdutos() {
 
       <section className="cartao p-5">
         <h2 className="mb-3 font-bold">Perfil de cada categoria</h2>
+        {t.categorias.some((c) => c.sugestaoId) && (
+          <Aviso
+            tipo="info"
+            className="mb-4"
+            titulo="Sugestão pelo nome da categoria"
+            acao={
+              <Botao tamanho="p" onClick={() => fazer(() => gestao.post('/fiscal/categorias/sugestoes'), 'Sugestões aplicadas.')}>
+                Aplicar sugestões
+              </Botao>
+            }
+          >
+            Categorias de bebida estão usando o perfil padrão (comida). Sugerimos o perfil de bebida para{' '}
+            {t.categorias
+              .filter((c) => c.sugestaoId)
+              .map((c) => c.nome)
+              .join(', ')}
+            . Confirme com o seu contador.
+          </Aviso>
+        )}
         {!t.categorias.length ? (
           <p className="text-sm text-stone-500">Cadastre o cardápio primeiro.</p>
         ) : (
@@ -475,6 +512,18 @@ function TributacaoProdutos() {
                     </option>
                   ))}
                 </Selecao>
+                {c.sugestaoId && (
+                  <p className="mt-1.5 flex flex-wrap items-center gap-x-2 text-xs text-amber-800">
+                    <span>Sugerido: {t.perfis.find((p) => p.id === c.sugestaoId)?.nome}</span>
+                    <button
+                      type="button"
+                      className="font-semibold text-marca underline"
+                      onClick={() => fazer(() => gestao.put(`/fiscal/categorias/${c.id}`, { perfilId: c.sugestaoId }), `${c.nome}: sugestão aplicada.`)}
+                    >
+                      Usar sugestão
+                    </button>
+                  </p>
+                )}
               </Campo>
             ))}
           </div>

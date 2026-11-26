@@ -303,6 +303,8 @@ export interface ConfigFiscal {
   cscConfigurado: boolean;
   certificado: { enviado: boolean; titular: string | null; cnpj: string | null; validade: string | null };
   pendencias: string[];
+  /** Categorias de bebida ainda no perfil padrão (comida): aviso para conferir a tributação. */
+  sugestoesTributacao?: string[];
   passos: {
     dados: boolean;
     conexao: string | null;
@@ -329,7 +331,8 @@ export interface PerfilFiscal {
 
 export interface Tributacao {
   perfis: PerfilFiscal[];
-  categorias: { id: number; nome: string; produtos: number; perfilId: number }[];
+  /** sugestaoId: perfil sugerido pelo nome da categoria (bebidas), ainda não aplicado. */
+  categorias: { id: number; nome: string; produtos: number; perfilId: number; sugestaoId?: number | null }[];
   produtos: { id: number; nome: string; categoria: string; ncm: string | null; cest: string | null }[];
   opcoes: { cfop: string[]; csosn: Record<string, string>; pisCofins: Record<string, string> };
 }
