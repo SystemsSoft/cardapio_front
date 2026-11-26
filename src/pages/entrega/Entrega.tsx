@@ -1,14 +1,17 @@
-import { ArrowLeft, Bike, CheckCircle2, ChefHat, Clock, MapPin, Minus, Phone, Plus, Trash2, XCircle } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, Bike, CheckCircle2, ChefHat, Clock, LocateFixed, MapPin, Minus, Phone, Plus, Trash2, XCircle } from 'lucide-react';
+import { Suspense, lazy, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ImagemProduto, useAgora } from '../../components/comuns';
 import { AreaTexto, Aviso, Botao, Carregando, Entrada, Janela, cx, useAvisos } from '../../components/ui';
 import { adicionaisEscolhidos, mesmosAdicionais, precoComAdicionais, textoAdicionais } from '../../lib/adicionais';
 import { api, mensagemDe } from '../../lib/api';
 import { centavosDoTexto, reais, telefone, tempoDesde } from '../../lib/formato';
+import { enderecoDaPosicao, obterPosicao } from '../../lib/geo';
 import { aplicarMarca } from '../../lib/marca';
 import type { Categoria, Entrega as PedidoEntrega, Produto, RestaurantePublico, StatusEntrega } from '../../lib/tipos';
 import { FolhaProduto, ListaCardapio } from '../cliente/Mesa';
+
+const Mapa = lazy(() => import('../../components/Mapa'));
 
 type Info = RestaurantePublico & { ativas: boolean; taxaEntrega: number; formasPagamento: string[]; liberado: boolean };
 interface Item {
@@ -25,6 +28,8 @@ interface Dados {
   complemento: string;
   bairro: string;
   referencia: string;
+  latitude?: number | null;
+  longitude?: number | null;
 }
 
 function guardado<T>(chave: string, inicial: T) {
@@ -210,6 +215,36 @@ function Finalizar({
   const [erro, setErro] = useState('');
   const total = subtotal + info.taxaEntrega;
   const mudar = (campo: keyof Dados, v: string) => setD((x) => ({ ...x, [campo]: v }));
+  const [localizando, setLocalizando] = useState(false);
+  const [avisoLocal, setAvisoLocal] = useState<{ texto: string; erro?: boolean } | null>(null);
+  const temLocal = d.latitude != null && d.longitude != null;
+
+  const usarLocalizacao = async () => {
+    setAvisoLocal(null);
+    setLocalizando(true);
+    try {
+      const p = await obterPosicao();
+      setD((x) => ({ ...x, latitude: p.latitude, longitude: p.longitude }));
+      const achado = await enderecoDaPosicao(p.latitude, p.longitude);
+      if (achado?.rua) {
+        setD((x) => ({ ...x, endereco: achado.numero ? `${achado.rua}, ${achado.numero}` : `${achado.rua}, `, bairro: achado.bairro || x.bairro }));
+      }
+      const impreciso = p.precisao != null && p.precisao > 80;
+      setAvisoLocal({
+        texto: !achado?.rua
+          ? 'Localização marcada no mapa. Preencha a rua e o número abaixo.'
+          : !achado.numero
+            ? 'Endereço preenchido pela localização. Confira e complete o número da casa.'
+            : impreciso
+              ? `Localização aproximada (cerca de ${Math.round(p.precisao!)} m). Confira o endereço e ajuste o pino no mapa.`
+              : 'Endereço preenchido pela localização. Confira se está certo.',
+      });
+    } catch (e) {
+      setAvisoLocal({ texto: e instanceof Error ? e.message : 'Não foi possível achar a sua localização.', erro: true });
+    } finally {
+      setLocalizando(false);
+    }
+  };
   const mudarQtd = (chave: string, q: number) => setItens((l) => (q <= 0 ? l.filter((i) => i.chave !== chave) : l.map((i) => (i.chave === chave ? { ...i, quantidade: q } : i))));
 
   const enviar = async () => {
@@ -226,6 +261,8 @@ function Finalizar({
       guardar('entrega:dados', d);
       const r = await api.post<{ codigo: string }>(`/entrega/${rid}/pedidos`, {
         ...d,
+        latitude: temLocal ? d.latitude : null,
+        longitude: temLocal ? d.longitude : null,
         formaPagamento: forma,
         trocoPara,
         observacao: obs,
@@ -299,6 +336,32 @@ function Finalizar({
             <span className="rotulo">Telefone (WhatsApp)</span>
             <Entrada id="ent-telefone" value={d.telefone} onChange={(e) => mudar('telefone', telefone(e.target.value))} inputMode="tel" autoComplete="tel" placeholder="(21) 99999-0000" />
           </label>
+          <div className="space-y-2 rounded-xl border border-stone-200 bg-stone-50 p-3">
+            {temLocal ? (
+              <>
+                <Suspense fallback={<div className="h-52 animate-pulse rounded-xl bg-stone-200" />}>
+                  <Mapa latitude={d.latitude!} longitude={d.longitude!} editavel className="h-52" aoMudar={(lat, lng) => setD((x) => ({ ...x, latitude: lat, longitude: lng }))} />
+                </Suspense>
+                <p className="text-xs text-stone-600">Se o pino não estiver na sua porta, arraste-o ou toque no lugar certo do mapa.</p>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm font-semibold">
+                  <button type="button" className="text-marca disabled:opacity-50" disabled={localizando} onClick={usarLocalizacao}>
+                    {localizando ? 'Localizando…' : 'Localizar de novo'}
+                  </button>
+                  <button type="button" className="text-stone-500" onClick={() => { setD((x) => ({ ...x, latitude: null, longitude: null })); setAvisoLocal(null); }}>
+                    Remover localização
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <Botao variante="secundario" largo carregando={localizando} icone={<LocateFixed className="h-4 w-4" />} onClick={usarLocalizacao}>
+                  Usar minha localização
+                </Botao>
+                <p className="text-center text-xs text-stone-500">Preenche o endereço e mostra ao restaurante onde entregar.</p>
+              </>
+            )}
+            {avisoLocal && <p className={cx('text-sm', avisoLocal.erro ? 'text-red-700' : 'text-emerald-800')}>{avisoLocal.texto}</p>}
+          </div>
           <label className="block"><span className="rotulo">Endereço (rua e número)</span><Entrada id="ent-endereco" value={d.endereco} onChange={(e) => mudar('endereco', e.target.value)} maxLength={120} autoComplete="street-address" placeholder="Rua das Flores, 120" /></label>
           <div className="grid grid-cols-2 gap-3">
             <label className="block"><span className="rotulo">Complemento</span><Entrada id="ent-complemento" value={d.complemento} onChange={(e) => mudar('complemento', e.target.value)} maxLength={60} placeholder="Apto, bloco…" /></label>

@@ -72,3 +72,10 @@
     break-inside: avoid;
   }
 }
+
+/* Pino do mapa (Leaflet/OpenStreetMap) */
+.mapa-pino { width: 34px; height: 44px; position: relative; filter: drop-shadow(0 3px 4px rgb(0 0 0 / 0.35)); }
+.mapa-pino::before { content: ""; position: absolute; left: 3px; top: 0; width: 28px; height: 28px; border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg); transform-origin: center; background: rgb(var(--marca, 217 72 15)); border: 3px solid #fff; top: 4px; }
+.mapa-pino span { position: absolute; left: 13px; top: 14px; width: 8px; height: 8px; border-radius: 50%; background: #fff; }
+.leaflet-container { font: inherit; }

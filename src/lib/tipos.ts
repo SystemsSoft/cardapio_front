@@ -381,6 +381,8 @@ export interface Entrega {
   complemento: string;
   bairro: string;
   referencia: string;
+  latitude: number | null;
+  longitude: number | null;
   formaPagamento: string;
   trocoPara: number | null;
   observacao: string;

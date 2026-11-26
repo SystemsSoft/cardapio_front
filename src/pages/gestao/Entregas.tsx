@@ -1,13 +1,16 @@
-import { BarChart3, Bike, ChefHat, CheckCircle2, Copy, ExternalLink, MapPin, MessageCircle, Phone, Printer, X } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { BarChart3, Bike, ChefHat, CheckCircle2, Copy, ExternalLink, Map as IconeMapa, MapPin, MessageCircle, Navigation, Phone, Printer, X } from 'lucide-react';
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
 import { QrCode } from '../../components/comuns';
 import { Abas, Aviso, Botao, Carregando, Entrada, Interruptor, Janela, Selo, Titulo, Vazio, cx, useAvisos } from '../../components/ui';
 import { textoAdicionais } from '../../lib/adicionais';
 import { gestao, mensagemDe, urlBaseSalva } from '../../lib/api';
 import { centavosDoTexto, reais, telefone, tempoDesde, textoDosCentavos } from '../../lib/formato';
+import { linkMapa, linkRota } from '../../lib/geo';
 import type { ConfigEntregas, Entrega, StatusEntrega } from '../../lib/tipos';
 import { useAgora } from '../../components/comuns';
 import { useGestao } from './contexto';
+
+const Mapa = lazy(() => import('../../components/Mapa'));
 
 const COLUNAS: { status: StatusEntrega; titulo: string; cor: string }[] = [
   { status: 'recebido', titulo: 'Novos', cor: 'bg-sky-500' },
@@ -205,6 +208,8 @@ function CartaoEntrega({ entrega: e, agora, aoMudar, taxaPadrao, aoTaxa }: { ent
   const aberto = e.status !== 'entregue' && e.status !== 'cancelado';
   const proximo = PROXIMO[e.status];
   const fone = e.telefone.replace(/\D/g, '');
+  const [verMapa, setVerMapa] = useState(false);
+  const temLocal = e.latitude != null && e.longitude != null;
   return (
     <article className="cartao overflow-hidden">
       <div className="flex items-center gap-2 border-b border-stone-100 px-4 py-2.5">
@@ -232,7 +237,13 @@ function CartaoEntrega({ entrega: e, agora, aoMudar, taxaPadrao, aoTaxa }: { ent
             {e.referencia && <span className="block text-xs text-stone-500">Ref.: {e.referencia}</span>}
           </span>
         </p>
+        {temLocal && (
+          <button type="button" onClick={() => setVerMapa(true)} className="inline-flex items-center gap-1 rounded-lg bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-800 hover:bg-sky-100">
+            <IconeMapa className="h-3.5 w-3.5" /> Ver no mapa
+          </button>
+        )}
       </div>
+      {verMapa && temLocal && <JanelaMapa entrega={e} aoFechar={() => setVerMapa(false)} />}
       <ul className="space-y-1 px-4 py-3 text-sm">
         {e.itens.map((i) => (
           <li key={i.id}>
@@ -269,6 +280,38 @@ function CartaoEntrega({ entrega: e, agora, aoMudar, taxaPadrao, aoTaxa }: { ent
         </div>
       )}
     </article>
+  );
+}
+
+function JanelaMapa({ entrega: e, aoFechar }: { entrega: Entrega; aoFechar: () => void }) {
+  const lat = e.latitude!;
+  const lng = e.longitude!;
+  return (
+    <Janela aberta aoFechar={aoFechar} titulo={`Entrega #${e.id} · ${e.clienteNome}`} largura="max-w-2xl" cheiaNoCelular>
+      <div className="space-y-3">
+        <Suspense fallback={<div className="h-80 animate-pulse rounded-xl bg-stone-200" />}>
+          <Mapa latitude={lat} longitude={lng} className="h-80 sm:h-96" />
+        </Suspense>
+        <p className="flex gap-1.5 text-sm text-stone-700">
+          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-stone-400" />
+          <span className="break-words">
+            {e.endereco}
+            {e.complemento && ` · ${e.complemento}`}
+            {e.bairro && ` · ${e.bairro}`}
+            {e.referencia && <span className="block text-xs text-stone-500">Ref.: {e.referencia}</span>}
+          </span>
+        </p>
+        <p className="text-xs text-stone-500">Ponto marcado pelo cliente com a localização do celular.</p>
+        <div className="flex flex-wrap gap-2">
+          <a href={linkRota(lat, lng)} target="_blank" rel="noopener" className="inline-flex items-center gap-1.5 rounded-xl bg-marca px-3 py-2 text-sm font-semibold text-white hover:bg-marca-escura">
+            <Navigation className="h-4 w-4" /> Traçar rota
+          </a>
+          <a href={linkMapa(lat, lng)} target="_blank" rel="noopener" className="inline-flex items-center gap-1.5 rounded-xl border border-stone-300 bg-white px-3 py-2 text-sm font-semibold text-stone-800 hover:bg-stone-50">
+            <ExternalLink className="h-4 w-4" /> Abrir no OpenStreetMap
+          </a>
+        </div>
+      </div>
+    </Janela>
   );
 }
 
