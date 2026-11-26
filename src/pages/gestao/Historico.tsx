@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Botao, Carregando, Selo, Titulo, Vazio, cx, useAvisos } from '../../components/ui';
 import { gestao, mensagemDe } from '../../lib/api';
+import { nomeComAdicionais } from '../../lib/adicionais';
 import { dataHora, hora, reais } from '../../lib/formato';
 import type { ConfigFiscal, Sessao, SessaoHistorico } from '../../lib/tipos';
 import { JanelaEmitirNota, STATUS_NOTA } from './compartilhado';
@@ -89,7 +90,7 @@ export default function Historico() {
                         {p.itens.map((i) => (
                           <p key={i.id} className="flex justify-between">
                             <span>
-                              {i.quantidade}× {i.nome}
+                              {i.quantidade}× {nomeComAdicionais(i)}
                             </span>
                             <span>{reais(i.total)}</span>
                           </p>

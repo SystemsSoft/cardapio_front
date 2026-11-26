@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useAgora } from '../../components/comuns';
 import { Aviso, Botao, Campo, Entrada, Janela, Selecao, Selo, cx, useAvisos } from '../../components/ui';
 import { gestao, mensagemDe } from '../../lib/api';
+import { textoAdicionais } from '../../lib/adicionais';
 import { FORMAS_PAGAMENTO, centavosDoTexto, cpfOuCnpj, minutosDesde, reais, soDigitos, tempoDesde } from '../../lib/formato';
 import type { Nota, Pedido, StatusNota, StatusPedido } from '../../lib/tipos';
 
@@ -61,6 +62,7 @@ export function CartaoPedido({ pedido, mostrarMesa = true, compacto }: { pedido:
           <li key={i.id}>
             <span className="font-bold">{i.quantidade}×</span> {i.nome}
             {i.observacao && <span className="ml-1 rounded bg-amber-100 px-1.5 text-xs font-medium text-amber-900">{i.observacao}</span>}
+            {!!i.adicionais?.length && <span className="block pl-5 text-sm font-semibold text-sky-800">{textoAdicionais(i.adicionais)}</span>}
           </li>
         ))}
         {pedido.observacao && <li className="pt-1 text-sm italic text-stone-600">“{pedido.observacao}”</li>}

@@ -142,6 +142,7 @@ export default function Cardapio() {
                             {p.esgotado && <Selo cor="vermelho">Esgotado</Selo>}
                             {p.estoqueBaixo && <Selo cor="amarelo">Estoque baixo: {p.estoque}</Selo>}
                             {p.controlaEstoque && !p.esgotado && !p.estoqueBaixo && <Selo>Estoque: {p.estoque}</Selo>}
+                            {!!p.adicionais?.length && <Selo cor="azul">+{p.adicionais.length} {p.adicionais.length === 1 ? 'adicional' : 'adicionais'}</Selo>}
                           </div>
                         </button>
                         <div className="flex flex-col items-center gap-1">
@@ -209,6 +210,12 @@ function EditorProduto({
   const [foto, setFoto] = useState<File | null>(null);
   const [previa, setPrevia] = useState<string | null>(null);
   const [disponivel, setDisponivel] = useState(produto?.disponivel ?? true);
+  // Adicionais (ex.: molho extra): nome + preço opcional (em branco = grátis). `id` mantém os já salvos.
+  const [adicionais, setAdicionais] = useState(() =>
+    (produto?.adicionais ?? []).map((a) => ({ chave: a.id, id: a.id as number | undefined, nome: a.nome, preco: a.preco ? textoDosCentavos(a.preco) : '' })),
+  );
+  const mudarAdicional = (chave: number, campo: 'nome' | 'preco', valor: string) =>
+    setAdicionais((lista) => lista.map((a) => (a.chave === chave ? { ...a, [campo]: valor } : a)));
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState('');
   const arquivo = useRef<HTMLInputElement>(null);
@@ -237,6 +244,15 @@ function EditorProduto({
     const centavos = centavosDoTexto(preco);
     if (preco.trim() && centavos == null) return setErro('Preço inválido.');
     const corpo: Record<string, unknown> = { nome, descricao, preco: centavos, disponivel, imagem: foto ? produto?.imagem || '🍽️' : imagem };
+    const listaAdicionais = [];
+    for (const a of adicionais) {
+      if (!a.nome.trim() && !a.preco.trim()) continue; // linha vazia: ignora
+      if (!a.nome.trim()) return setErro('Dê um nome a cada adicional (ou remova o que estiver em branco).');
+      const p = a.preco.trim() ? centavosDoTexto(a.preco) : 0;
+      if (p == null) return setErro(`Preço inválido no adicional “${a.nome.trim()}”.`);
+      listaAdicionais.push({ id: a.id, nome: a.nome.trim(), preco: p });
+    }
+    corpo.adicionais = listaAdicionais;
     if (categoria.startsWith('id:')) corpo.categoriaId = Number(categoria.slice(3));
     else if (categoria.startsWith('nome:')) corpo.categoriaNome = categoria.slice(5);
     else if (categoriaTexto.trim()) corpo.categoriaNome = categoriaTexto.trim();
@@ -374,6 +390,56 @@ function EditorProduto({
             <Entrada value={categoriaTexto} onChange={(e) => setCategoriaTexto(e.target.value)} maxLength={60} placeholder="Ex.: Grelhados" />
           </Campo>
         )}
+
+        <div>
+          <div className="mb-1.5 flex items-baseline justify-between gap-2">
+            <p className="text-sm font-medium text-stone-700">Adicionais</p>
+            <p className="text-xs text-stone-500">Quem pede escolhe se quer cada um</p>
+          </div>
+          {adicionais.length > 0 ? (
+            <ul className="space-y-2">
+              {adicionais.map((a) => (
+                <li key={a.chave} className="flex items-center gap-2">
+                  <Entrada
+                    value={a.nome}
+                    onChange={(e) => mudarAdicional(a.chave, 'nome', e.target.value)}
+                    maxLength={60}
+                    placeholder="Ex.: Molho especial"
+                    aria-label="Nome do adicional"
+                    className="min-w-0 flex-1"
+                  />
+                  <div className="relative w-[6.5rem] shrink-0">
+                    <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-stone-500">+R$</span>
+                    <Entrada
+                      value={a.preco}
+                      onChange={(e) => mudarAdicional(a.chave, 'preco', e.target.value)}
+                      inputMode="decimal"
+                      placeholder="grátis"
+                      aria-label={`Preço de ${a.nome || 'adicional'}`}
+                      className="pl-10 pr-2"
+                    />
+                  </div>
+                  <BotaoIcone rotulo="Remover adicional" className="shrink-0" onClick={() => setAdicionais((lista) => lista.filter((x) => x.chave !== a.chave))}>
+                    <Trash2 className="h-4 w-4" />
+                  </BotaoIcone>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="rounded-xl border border-dashed border-stone-300 px-3 py-2.5 text-sm text-stone-500">
+              Nenhum adicional. Ex.: molho especial, bacon extra, borda recheada.
+            </p>
+          )}
+          <Botao
+            tamanho="p"
+            variante="secundario"
+            className="mt-2"
+            icone={<Plus className="h-4 w-4" />}
+            onClick={() => setAdicionais((lista) => [...lista, { chave: Date.now(), id: undefined, nome: '', preco: '' }])}
+          >
+            Adicionar adicional
+          </Botao>
+        </div>
 
         <div className="flex items-center justify-between rounded-xl bg-stone-50 px-4 py-3">
           <div>

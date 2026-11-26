@@ -71,6 +71,14 @@ export interface Produto {
   estoqueMinimo: number;
   esgotado: boolean;
   estoqueBaixo: boolean;
+  /** Adicionais que o cliente pode escolher (ex.: molho extra). preco 0 = grátis. */
+  adicionais?: Adicional[];
+}
+
+export interface Adicional {
+  id: number;
+  nome: string;
+  preco: number;
 }
 
 export interface Categoria {
@@ -89,6 +97,10 @@ export interface ItemPedido {
   precoUnitario: number;
   quantidade: number;
   observacao: string;
+  /** Adicionais escolhidos (cópia do nome e preço da época do pedido). */
+  adicionais?: { nome: string; preco: number }[];
+  /** Soma dos adicionais por unidade (já incluída em total). */
+  precoAdicionais?: number;
   total: number;
   /** Garçom marcou como entregue na mesa. */
   entregue?: boolean;

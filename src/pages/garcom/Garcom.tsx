@@ -6,6 +6,7 @@ import { JanelaFechamento, avisoDoFechamento } from '../../components/Fechamento
 import { PainelQrMesa, linkDaMesa } from '../../components/QrMesa';
 import { Abas, Aviso, Botao, Campo, Carregando, Entrada, Janela, Selo, cx, useAvisos } from '../../components/ui';
 import { api, mensagemDe, nomeSalvo } from '../../lib/api';
+import { nomeComAdicionais } from '../../lib/adicionais';
 import { reais, tempoDesde } from '../../lib/formato';
 import { aplicarMarca } from '../../lib/marca';
 import { liberarSom, tocar } from '../../lib/som';
@@ -216,7 +217,7 @@ export default function Garcom() {
                   detalhe={
                     <>
                       {p.clienteNome && <b className="block text-stone-900">{p.clienteNome}</b>}
-                      {p.itens.map((i) => `${i.quantidade}× ${i.nome}`).join(', ')}
+                      {p.itens.map((i) => `${i.quantidade}× ${nomeComAdicionais(i)}`).join(', ')}
                     </>
                   }
                 >

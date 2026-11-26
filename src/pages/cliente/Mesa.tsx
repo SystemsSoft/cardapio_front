@@ -19,6 +19,7 @@ import { Contador, ImagemProduto, useAgora } from '../../components/comuns';
 import { PainelQrMesa, linkDaMesa } from '../../components/QrMesa';
 import { AreaTexto, Aviso, Botao, Carregando, Entrada, Janela, Selo, cx, useAvisos } from '../../components/ui';
 import { api, mensagemDe, nomeSalvo } from '../../lib/api';
+import { adicionaisEscolhidos, mesmosAdicionais, nomeComAdicionais, precoComAdicionais, textoAdicionais } from '../../lib/adicionais';
 import { reais, tempoDesde } from '../../lib/formato';
 import { aplicarMarca } from '../../lib/marca';
 import { useTempoReal } from '../../lib/tempoReal';
@@ -29,6 +30,8 @@ interface ItemCarrinho {
   produtoId: number;
   quantidade: number;
   observacao: string;
+  /** Ids dos adicionais escolhidos (ex.: molho extra). */
+  adicionais?: number[];
 }
 
 type Aba = 'cardapio' | 'pedidos' | 'conta';
@@ -121,13 +124,13 @@ export default function Mesa() {
     return p && p.disponivel && !p.esgotado && p.preco != null;
   });
   const qtdCarrinho = carrinhoValido.reduce((s, i) => s + i.quantidade, 0);
-  const totalCarrinho = carrinhoValido.reduce((s, i) => s + i.quantidade * (produtos.get(i.produtoId)?.preco ?? 0), 0);
+  const totalCarrinho = carrinhoValido.reduce((s, i) => s + i.quantidade * precoComAdicionais(produtos.get(i.produtoId)!, i.adicionais), 0);
 
-  const adicionar = (produto: Produto, quantidade: number, observacao: string) => {
+  const adicionar = (produto: Produto, quantidade: number, observacao: string, adicionais: number[]) => {
     setCarrinho((c) => {
-      const igual = c.find((i) => i.produtoId === produto.id && i.observacao === observacao);
+      const igual = c.find((i) => i.produtoId === produto.id && i.observacao === observacao && mesmosAdicionais(i.adicionais, adicionais));
       if (igual) return c.map((i) => (i === igual ? { ...i, quantidade: Math.min(99, i.quantidade + quantidade) } : i));
-      return [...c, { chave: `${produto.id}-${Date.now()}`, produtoId: produto.id, quantidade, observacao }];
+      return [...c, { chave: `${produto.id}-${Date.now()}`, produtoId: produto.id, quantidade, observacao, adicionais }];
     });
     avisar(`${quantidade}× ${produto.nome} no carrinho`);
   };
@@ -224,7 +227,12 @@ export default function Mesa() {
         total={totalCarrinho}
         aoEnviar={async (clienteNome, observacao) => {
           const r = await api.post<{ id: number; estado: EstadoMesa }>(`/cliente/${rid}/mesas/${numero}/pedidos${q}`, {
-            itens: carrinhoValido.map(({ produtoId, quantidade, observacao }) => ({ produtoId, quantidade, observacao })),
+            itens: carrinhoValido.map(({ produtoId, quantidade, observacao, adicionais }) => ({
+              produtoId,
+              quantidade,
+              observacao,
+              adicionais: adicionaisEscolhidos(produtos.get(produtoId)!, adicionais).map((a) => a.id),
+            })),
             clienteNome,
             observacao,
           });
@@ -416,15 +424,18 @@ export function FolhaProduto({
 }: {
   produto: Produto | null;
   aoFechar: () => void;
-  aoAdicionar: (p: Produto, qtd: number, obs: string) => void;
+  aoAdicionar: (p: Produto, qtd: number, obs: string, adicionais: number[]) => void;
 }) {
   const [qtd, setQtd] = useState(1);
   const [obs, setObs] = useState('');
+  const [escolhidos, setEscolhidos] = useState<number[]>([]);
   useEffect(() => {
     setQtd(1);
     setObs('');
+    setEscolhidos([]);
   }, [produto?.id]);
   if (!produto) return null;
+  const unitario = precoComAdicionais(produto, escolhidos);
   const limite = produto.controlaEstoque && produto.estoque != null ? Math.min(99, produto.estoque) : 99;
   return (
     <Janela
@@ -437,11 +448,11 @@ export function FolhaProduto({
             tamanho="g"
             largo
             onClick={() => {
-              aoAdicionar(produto, qtd, obs.trim());
+              aoAdicionar(produto, qtd, obs.trim(), escolhidos);
               aoFechar();
             }}
           >
-            Adicionar · {reais((produto.preco ?? 0) * qtd)}
+            Adicionar · {reais(unitario * qtd)}
           </Botao>
         </div>
       }
@@ -453,6 +464,28 @@ export function FolhaProduto({
       {produto.descricao && <p className="mt-1.5 text-stone-600">{produto.descricao}</p>}
       <p className="mt-3 text-lg font-bold">{reais(produto.preco)}</p>
       {produto.estoqueBaixo && <p className="mt-1 text-sm font-medium text-amber-700">Restam só {produto.estoque} unidades.</p>}
+      {!!produto.adicionais?.length && (
+        <fieldset className="mt-5">
+          <legend className="rotulo">Adicionais</legend>
+          <div className="divide-y divide-stone-100 overflow-hidden rounded-xl border border-stone-200">
+            {produto.adicionais.map((a) => {
+              const marcado = escolhidos.includes(a.id);
+              return (
+                <label key={a.id} className={cx('flex cursor-pointer items-center gap-3 px-3.5 py-3 transition', marcado ? 'bg-marca-clara' : 'hover:bg-stone-50')}>
+                  <input
+                    type="checkbox"
+                    className="h-5 w-5 accent-[rgb(var(--marca))]"
+                    checked={marcado}
+                    onChange={(e) => setEscolhidos((l) => (e.target.checked ? [...l, a.id] : l.filter((x) => x !== a.id)))}
+                  />
+                  <span className="min-w-0 flex-1 font-medium">{a.nome}</span>
+                  <span className={cx('shrink-0 text-sm font-semibold', a.preco ? 'text-stone-700' : 'text-emerald-700')}>{a.preco ? `+ ${reais(a.preco)}` : 'grátis'}</span>
+                </label>
+              );
+            })}
+          </div>
+        </fieldset>
+      )}
       <label className="mt-5 block">
         <span className="rotulo">Alguma observação?</span>
         <AreaTexto value={obs} onChange={(e) => setObs(e.target.value)} maxLength={200} placeholder="Ex.: sem cebola, ponto da carne…" rows={2} />
@@ -564,8 +597,9 @@ function Carrinho({
                 <ImagemProduto imagem={p.imagem} nome={p.nome} className="h-14 w-14 shrink-0 rounded-xl text-[0.9rem]" />
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold leading-tight">{p.nome}</p>
+                  {adicionaisEscolhidos(p, i.adicionais).length > 0 && <p className="text-xs font-medium text-stone-600">{textoAdicionais(adicionaisEscolhidos(p, i.adicionais))}</p>}
                   {i.observacao && <p className="truncate text-xs text-stone-500">“{i.observacao}”</p>}
-                  <p className="text-sm font-semibold text-stone-700">{reais((p.preco ?? 0) * i.quantidade)}</p>
+                  <p className="text-sm font-semibold text-stone-700">{reais(precoComAdicionais(p, i.adicionais) * i.quantidade)}</p>
                 </div>
                 <div className="flex items-center gap-1">
                   <button type="button" onClick={() => mudar(i.chave, i.quantidade - 1)} className="flex h-8 w-8 items-center justify-center rounded-lg bg-stone-100" aria-label="Diminuir">
@@ -672,6 +706,7 @@ function MeusPedidos({ sessao }: { sessao: Sessao | null }) {
                 <li key={i.id} className="flex justify-between gap-2">
                   <span>
                     <b>{i.quantidade}×</b> {i.nome}
+                    {!!i.adicionais?.length && <span className="block text-xs font-medium text-stone-600">{textoAdicionais(i.adicionais)}</span>}
                     {i.observacao && <span className="block text-xs text-stone-500">“{i.observacao}”</span>}
                   </span>
                   <span className="shrink-0 text-stone-600">{reais(i.total)}</span>
@@ -710,8 +745,9 @@ function Conta({
     .filter((p) => p.status !== 'cancelado')
     .forEach((p) =>
       p.itens.forEach((i) => {
-        const k = `${i.nome}|${i.precoUnitario}`;
-        const atual = itens.get(k) ?? { nome: i.nome, quantidade: 0, total: 0 };
+        const nome = nomeComAdicionais(i);
+        const k = `${nome}|${i.precoUnitario + (i.precoAdicionais ?? 0)}`;
+        const atual = itens.get(k) ?? { nome, quantidade: 0, total: 0 };
         itens.set(k, { ...atual, quantidade: atual.quantidade + i.quantidade, total: atual.total + i.total });
       }),
     );

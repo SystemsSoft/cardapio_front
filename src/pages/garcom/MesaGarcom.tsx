@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useAgora } from '../../components/comuns';
 import { Aviso, Botao, Selo, cx, useAvisos } from '../../components/ui';
 import { api, mensagemDe } from '../../lib/api';
+import { nomeComAdicionais, textoAdicionais } from '../../lib/adicionais';
 import { ROTULO_STATUS, reais, tempoDesde } from '../../lib/formato';
 import type { MesaGestao, Pedido } from '../../lib/tipos';
 
@@ -200,7 +201,7 @@ export default function MesaGarcom({
                   <ul className="cartao divide-y divide-stone-100 opacity-60">
                     {cancelados.map((p) => (
                       <li key={p.id} className="px-4 py-2.5 text-sm line-through">
-                        <b>{p.clienteNome || `Pedido #${p.id}`}</b> · {p.itens.map((i) => `${i.quantidade}× ${i.nome}`).join(', ')}
+                        <b>{p.clienteNome || `Pedido #${p.id}`}</b> · {p.itens.map((i) => `${i.quantidade}× ${nomeComAdicionais(i)}`).join(', ')}
                       </li>
                     ))}
                   </ul>
@@ -290,6 +291,7 @@ function CartaoPedido({
                   <span className={cx('block font-semibold leading-tight', ok && 'text-stone-400 line-through')}>
                     {i.quantidade}× {i.nome}
                   </span>
+                  {!!i.adicionais?.length && <span className={cx('block text-xs font-semibold text-sky-800', ok && 'text-stone-400')}>{textoAdicionais(i.adicionais)}</span>}
                   {i.observacao && <span className="block truncate text-xs text-amber-700">“{i.observacao}”</span>}
                 </span>
                 <span className={cx('text-xs font-semibold', ok ? 'text-emerald-700' : 'text-stone-400')}>{ok ? 'Entregue' : 'Entregar'}</span>

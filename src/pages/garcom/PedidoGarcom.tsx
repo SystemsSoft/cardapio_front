@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { ImagemProduto } from '../../components/comuns';
 import { AreaTexto, Aviso, Botao, Carregando, Entrada, Janela, useAvisos } from '../../components/ui';
 import { api, mensagemDe, nomeSalvo } from '../../lib/api';
+import { adicionaisEscolhidos, mesmosAdicionais, precoComAdicionais, textoAdicionais } from '../../lib/adicionais';
 import { reais } from '../../lib/formato';
 import type { Categoria, Produto } from '../../lib/tipos';
 import { FolhaProduto, ListaCardapio } from '../cliente/Mesa';
@@ -12,6 +13,7 @@ interface Item {
   produtoId: number;
   quantidade: number;
   observacao: string;
+  adicionais: number[];
 }
 
 /**
@@ -52,13 +54,13 @@ export default function PedidoGarcom({
   const produtos = useMemo(() => new Map((cardapio ?? []).flatMap((c) => c.produtos).map((p) => [p.id, p])), [cardapio]);
   const validos = itens.filter((i) => produtos.has(i.produtoId));
   const qtd = validos.reduce((s, i) => s + i.quantidade, 0);
-  const total = validos.reduce((s, i) => s + (produtos.get(i.produtoId)!.preco ?? 0) * i.quantidade, 0);
+  const total = validos.reduce((s, i) => s + precoComAdicionais(produtos.get(i.produtoId)!, i.adicionais) * i.quantidade, 0);
 
-  const adicionar = (p: Produto, quantidade: number, observacao: string) => {
+  const adicionar = (p: Produto, quantidade: number, observacao: string, adicionais: number[]) => {
     setItens((lista) => {
-      const igual = lista.find((i) => i.produtoId === p.id && i.observacao === observacao);
+      const igual = lista.find((i) => i.produtoId === p.id && i.observacao === observacao && mesmosAdicionais(i.adicionais, adicionais));
       if (igual) return lista.map((i) => (i === igual ? { ...i, quantidade: Math.min(99, i.quantidade + quantidade) } : i));
-      return [...lista, { chave: `${p.id}-${Date.now()}`, produtoId: p.id, quantidade, observacao }];
+      return [...lista, { chave: `${p.id}-${Date.now()}`, produtoId: p.id, quantidade, observacao, adicionais }];
     });
     avisar(`${quantidade}× ${p.nome} no pedido da mesa ${numero}.`);
   };
@@ -121,7 +123,12 @@ export default function PedidoGarcom({
         aoFechar={() => setCarrinho(false)}
         aoEnviar={async (cliente, observacao) => {
           await api.post(`/garcom/${rid}/mesas/${numero}/pedidos${q}`, {
-            itens: validos.map((i) => ({ produtoId: i.produtoId, quantidade: i.quantidade, observacao: i.observacao })),
+            itens: validos.map((i) => ({
+              produtoId: i.produtoId,
+              quantidade: i.quantidade,
+              observacao: i.observacao,
+              adicionais: adicionaisEscolhidos(produtos.get(i.produtoId)!, i.adicionais).map((a) => a.id),
+            })),
             clienteNome: cliente,
             observacao,
             garcom: nomeSalvo.ler() || '',
@@ -199,8 +206,9 @@ function CarrinhoGarcom({
                 <ImagemProduto imagem={p.imagem} nome={p.nome} className="h-14 w-14 shrink-0 rounded-xl text-[0.9rem]" />
                 <div className="min-w-0 flex-1">
                   <p className="font-semibold leading-tight">{p.nome}</p>
+                  {adicionaisEscolhidos(p, i.adicionais).length > 0 && <p className="text-xs font-medium text-stone-600">{textoAdicionais(adicionaisEscolhidos(p, i.adicionais))}</p>}
                   {i.observacao && <p className="truncate text-xs text-stone-500">“{i.observacao}”</p>}
-                  <p className="text-sm font-semibold text-stone-700">{reais((p.preco ?? 0) * i.quantidade)}</p>
+                  <p className="text-sm font-semibold text-stone-700">{reais(precoComAdicionais(p, i.adicionais) * i.quantidade)}</p>
                 </div>
                 <div className="flex items-center gap-1">
                   <button type="button" onClick={() => mudar(i.chave, i.quantidade - 1)} className="flex h-8 w-8 items-center justify-center rounded-lg bg-stone-100" aria-label="Diminuir">
