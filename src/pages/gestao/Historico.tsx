@@ -97,7 +97,7 @@ export default function Historico() {
                       </div>
                     ))}
                     <p className="flex justify-between border-t border-stone-200 pt-2 text-stone-600">
-                      <span>Subtotal {reais(s.subtotal)} + serviço {reais(s.taxaServico)}</span>
+                      <span>Subtotal {reais(s.subtotal)} {s.taxaServico > 0 ? `+ serviço ${s.taxaServicoPercentual.toLocaleString('pt-BR')}% (${reais(s.taxaServico)})` : '· sem taxa de serviço'}</span>
                       <b className="text-stone-900">{reais(s.total)}</b>
                     </p>
                     {!!s.pagamentos?.length && (

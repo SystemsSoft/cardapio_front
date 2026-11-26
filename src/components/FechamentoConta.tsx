@@ -1,5 +1,5 @@
 import { Plus, Split, Trash2, Users } from 'lucide-react';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { FORMAS_PAGAMENTO, centavosDoTexto, reais, textoDosCentavos } from '../lib/formato';
 import type { Sessao } from '../lib/tipos';
 import { Abas, Aviso, Botao, Entrada, Janela, Selecao, cx } from './ui';
@@ -10,7 +10,27 @@ export interface PagamentoDividido {
   valor: number;
 }
 
-export type DadosFechamento = { formaPagamento: string } | { pagamentos: PagamentoDividido[] };
+/** `taxaServicoPercentual`: taxa de serviço escolhida no fechamento (0 = sem taxa). */
+export type DadosFechamento = ({ formaPagamento: string } | { pagamentos: PagamentoDividido[] }) & { taxaServicoPercentual: number };
+
+const OPCOES_TAXA = [8, 10, 12, 15];
+
+/** Arredonda como o servidor (Python: metade vai para o par), para a divisão bater ao centavo. */
+function arredondar(x: number) {
+  const piso = Math.floor(x);
+  const resto = x - piso;
+  if (resto === 0.5) return piso % 2 === 0 ? piso : piso + 1;
+  return Math.round(x);
+}
+
+function lerPercentual(texto: string): number | null {
+  const t = texto.trim().replace(',', '.');
+  if (!t) return 0;
+  const n = Number(t);
+  return Number.isFinite(n) && n >= 0 && n <= 30 ? Math.round(n * 100) / 100 : null;
+}
+
+const formatarPct = (n: number) => n.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
 
 type ModoDivisao = 'consumo' | 'igual' | 'personalizado';
 interface Linha {
@@ -24,7 +44,7 @@ interface Linha {
 let proximoId = 1;
 
 /** Quanto cada nome consumiu (pedidos não cancelados) + a parte proporcional da taxa de serviço. */
-function consumoPorPessoa(sessao: Sessao) {
+function consumoPorPessoa(sessao: Sessao, taxaServico: number) {
   const mapa = new Map<string, number>();
   for (const p of sessao.pedidos) {
     if (p.status === 'cancelado') continue;
@@ -35,13 +55,13 @@ function consumoPorPessoa(sessao: Sessao) {
   const subtotal = pessoas.reduce((s, p) => s + p.consumo, 0) || 1;
   let distribuido = 0;
   for (const p of pessoas) {
-    const parte = Math.round((sessao.taxaServico * p.consumo) / subtotal);
+    const parte = Math.round((taxaServico * p.consumo) / subtotal);
     p.comServico = p.consumo + parte;
     distribuido += parte;
   }
   // Sobra do arredondamento da taxa vai para quem consumiu mais.
   const maior = pessoas.reduce((a, b) => (b.consumo > a.consumo ? b : a), pessoas[0]);
-  if (maior) maior.comServico += sessao.taxaServico - distribuido;
+  if (maior) maior.comServico += taxaServico - distribuido;
   return pessoas;
 }
 
@@ -74,7 +94,14 @@ export function JanelaFechamento({
   aoFechar: () => void;
   aoConfirmar: (dados: DadosFechamento) => Promise<void>;
 }) {
-  const pessoas = useMemo(() => consumoPorPessoa(sessao), [sessao]);
+  // Taxa de serviço: começa na padrão (ex.: 10%); o caixa pode trocar a porcentagem ou não cobrar (0%).
+  const [pctTexto, setPctTexto] = useState(formatarPct(sessao.taxaServicoPercentual));
+  const pctLido = lerPercentual(pctTexto);
+  const pct = pctLido ?? 0;
+  const taxa = arredondar((sessao.subtotal * pct) / 100);
+  const total = sessao.subtotal + taxa;
+
+  const pessoas = useMemo(() => consumoPorPessoa(sessao, taxa), [sessao, taxa]);
   const nomesReais = pessoas.filter((p) => p.nome !== 'Sem nome').map((p) => p.nome);
   const sugerir = pessoas.length >= 2;
 
@@ -83,8 +110,6 @@ export function JanelaFechamento({
   const [modo, setModo] = useState<ModoDivisao>('consumo');
   const [linhas, setLinhas] = useState<Linha[]>([]);
   const [enviando, setEnviando] = useState(false);
-
-  const total = sessao.total;
 
   const montar = (novoModo: ModoDivisao, base?: Linha[]) => {
     if (novoModo === 'consumo') {
@@ -137,6 +162,12 @@ export function JanelaFechamento({
     }
   };
 
+  // Mudou a taxa: refaz a divisão automática (por consumo ou em partes iguais) com o novo total.
+  useEffect(() => {
+    if (dividir && modo !== 'personalizado') setLinhas((ls) => montar(modo, ls));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [taxa]);
+
   const valores = linhas.map((l) => centavosDoTexto(l.valor) ?? 0);
   const distribuido = valores.reduce((s, v) => s + v, 0);
   const diferenca = total - distribuido;
@@ -158,8 +189,8 @@ export function JanelaFechamento({
     try {
       await aoConfirmar(
         dividir
-          ? { pagamentos: linhas.map((l, i) => ({ nome: l.nome.trim() || `Pessoa ${i + 1}`, formaPagamento: l.forma, valor: valores[i] })) }
-          : { formaPagamento: formaJunto },
+          ? { pagamentos: linhas.map((l, i) => ({ nome: l.nome.trim() || `Pessoa ${i + 1}`, formaPagamento: l.forma, valor: valores[i] })), taxaServicoPercentual: pct }
+          : { formaPagamento: formaJunto, taxaServicoPercentual: pct },
       );
     } finally {
       setEnviando(false);
@@ -194,7 +225,7 @@ export function JanelaFechamento({
               tamanho="g"
               variante="sucesso"
               carregando={enviando}
-              disabled={dividir ? !divisaoOk : !formaJunto}
+              disabled={pctLido == null || (dividir ? !divisaoOk : !formaJunto)}
               onClick={confirmar}
             >
               {dividir ? `Fechar conta dividida · ${reais(total)}` : `Fechar conta · ${reais(total)}`}
@@ -204,14 +235,50 @@ export function JanelaFechamento({
       }
     >
       <div className="space-y-4">
-        <div className="flex items-end justify-between gap-3 rounded-xl bg-stone-50 px-4 py-3">
-          <div>
-            <p className="text-sm text-stone-500">Total da mesa</p>
-            <p className="text-2xl font-extrabold">{reais(total)}</p>
+        <div className="rounded-xl bg-stone-50 px-4 py-3">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <p className="text-sm text-stone-500">Total da mesa</p>
+              <p className="text-2xl font-extrabold tabular-nums">{reais(total)}</p>
+            </div>
+            <p className="text-right text-xs text-stone-500">
+              {reais(sessao.subtotal)} {taxa > 0 ? `+ serviço ${formatarPct(pct)}% (${reais(taxa)})` : '· sem taxa de serviço'}
+            </p>
           </div>
-          <p className="text-right text-xs text-stone-500">
-            {reais(sessao.subtotal)} + serviço {sessao.taxaServicoPercentual}% ({reais(sessao.taxaServico)})
-          </p>
+          <div className="mt-3 border-t border-stone-200 pt-3">
+            <p className="mb-2 text-sm font-semibold">Taxa de serviço</p>
+            <div className="flex flex-wrap items-center gap-1.5">
+              {[0, ...OPCOES_TAXA].map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  onClick={() => setPctTexto(formatarPct(v))}
+                  aria-pressed={pctLido === v}
+                  className={cx(
+                    'rounded-full px-3 py-1.5 text-sm font-semibold ring-1 transition',
+                    pctLido === v ? 'bg-marca text-white ring-marca' : 'bg-white text-stone-700 ring-stone-200 hover:bg-stone-50',
+                  )}
+                >
+                  {v === 0 ? 'Sem taxa' : `${v}%`}
+                </button>
+              ))}
+              <label className="flex items-center gap-1.5 text-sm text-stone-600">
+                <span>Outra:</span>
+                <span className="relative">
+                  <Entrada
+                    id="taxa-servico"
+                    value={pctTexto}
+                    onChange={(e) => setPctTexto(e.target.value.replace(/[^\d.,]/g, '').slice(0, 5))}
+                    inputMode="decimal"
+                    aria-label="Porcentagem da taxa de serviço"
+                    className={cx('w-20 py-1.5 pr-7 text-right font-semibold', pctLido == null && 'border-red-400')}
+                  />
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm text-stone-500">%</span>
+                </span>
+              </label>
+            </div>
+            {pctLido == null && <p className="mt-1.5 text-xs font-medium text-red-700">Use uma taxa de 0% a 30%.</p>}
+          </div>
         </div>
 
         {!dividir && sugerir && (
