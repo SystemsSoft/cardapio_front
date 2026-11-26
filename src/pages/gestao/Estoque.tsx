@@ -88,7 +88,7 @@ export default function Estoque() {
       ) : (
         <div className="cartao divide-y divide-stone-100 overflow-hidden">
           {lista.map((i) => (
-            <div key={i.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
+            <div key={i.id} className="flex flex-col gap-3 p-4 xl:flex-row xl:items-center">
               <div className="flex min-w-0 flex-1 items-center gap-3">
                 <ImagemProduto imagem={i.imagem} nome={i.nome} className="h-12 w-12 shrink-0 rounded-xl text-[0.8rem]" />
                 <div className="min-w-0">
@@ -99,7 +99,7 @@ export default function Estoque() {
                 </div>
               </div>
               {i.controlaEstoque ? (
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2 pl-[3.75rem] xl:pl-0">
                   <div className="mr-2 text-right">
                     <p className={cx('text-xl font-extrabold tabular-nums', i.esgotado ? 'text-red-600' : i.estoqueBaixo ? 'text-amber-600' : 'text-stone-900')}>{i.estoque}</p>
                     <p className="text-[11px] text-stone-500">mín. {i.estoqueMinimo}</p>
@@ -120,7 +120,7 @@ export default function Estoque() {
                   <Interruptor ligado rotulo="Controlar estoque" aoMudar={() => desativar(i)} />
                 </div>
               ) : (
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 pl-[3.75rem] xl:pl-0">
                   <span className="text-sm text-stone-500">Venda livre</span>
                   <Interruptor ligado={false} rotulo="Controlar estoque" aoMudar={() => setAtivando(i)} />
                 </div>

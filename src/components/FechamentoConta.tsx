@@ -260,8 +260,12 @@ export function JanelaFechamento({
               disabled={pctLido == null || cpfErrado || (dividir ? !divisaoOk : !formaJunto)}
               onClick={confirmar}
             >
-              {dividir ? 'Fechar conta dividida' : 'Fechar conta'}
-              {emitir ? ' e emitir nota' : ''} · {reais(total)}
+              <span className="hidden sm:inline">
+                {dividir ? 'Fechar conta dividida' : 'Fechar conta'}
+                {emitir ? ' e emitir nota' : ''}
+              </span>
+              <span className="sm:hidden">{emitir ? 'Fechar e emitir nota' : dividir ? 'Fechar conta dividida' : 'Fechar conta'}</span>
+              &nbsp;· {reais(total)}
             </Botao>
           </div>
         )

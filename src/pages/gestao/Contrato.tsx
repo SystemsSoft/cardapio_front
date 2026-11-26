@@ -39,7 +39,7 @@ export default function Contrato() {
       />
       {doc.aceito && doc.aceite && (
         <Aviso tipo="sucesso" className="nao-imprimir mb-5" titulo="Contrato aceito">
-          <span className="inline-flex items-center gap-1">
+          <span className="inline-flex flex-wrap items-center gap-1">
             <CheckCircle2 className="h-4 w-4" /> Por {doc.aceite.responsavelNome} ({doc.aceite.responsavelDocumento}) em {dataHora(doc.aceite.aceitoEm)}.
           </span>
         </Aviso>
@@ -49,9 +49,9 @@ export default function Contrato() {
       ) : (
         <article className="cartao p-5 sm:p-8">
           {doc.textoAceito ? (
-            <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-stone-700">{doc.textoAceito}</pre>
+            <pre className="whitespace-pre-wrap break-words font-sans text-sm leading-relaxed text-stone-700">{doc.textoAceito}</pre>
           ) : (
-            <div className="space-y-6 text-sm leading-relaxed text-stone-700">
+            <div className="space-y-6 break-words text-sm leading-relaxed text-stone-700">
               <h2 className="text-center text-lg font-bold text-stone-900">{doc.titulo}</h2>
               {doc.secoes?.map((s, i) => (
                 <section key={i}>

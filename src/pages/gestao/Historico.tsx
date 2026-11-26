@@ -53,7 +53,7 @@ export default function Historico() {
             const podeEmitir = !nota || ['rejeitada', 'cancelada', 'inutilizada', 'substituida'].includes(nota.status);
             return (
               <div key={s.id}>
-                <div className="flex items-center gap-3 px-4 py-3">
+                <div className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-3">
                   <button type="button" className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => setAberta(aberta === s.id ? null : s.id)}>
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-stone-900 text-sm font-bold text-white">{s.mesa}</span>
                     <div className="min-w-0">
@@ -64,7 +64,7 @@ export default function Historico() {
                     </div>
                     <ChevronDown className={cx('ml-auto h-4 w-4 shrink-0 text-stone-400 transition', aberta === s.id && 'rotate-180')} />
                   </button>
-                  <div className="shrink-0">
+                  <div className="shrink-0 pl-[3.25rem] sm:pl-0">
                     {nota && !podeEmitir ? (
                       <Link to={`../notas?nota=${nota.id}`}>
                         <Selo cor={STATUS_NOTA[nota.status]?.cor}>
