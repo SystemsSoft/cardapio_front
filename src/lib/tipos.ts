@@ -383,6 +383,7 @@ export interface Entrega {
   referencia: string;
   latitude: number | null;
   longitude: number | null;
+  distanciaM: number | null;
   formaPagamento: string;
   trocoPara: number | null;
   observacao: string;
@@ -395,8 +396,16 @@ export interface Entrega {
   itens: ItemPedido[];
 }
 
+export interface FaixaEntrega {
+  ateKm: number;
+  taxa: number; // centavos
+}
+
 export interface ConfigEntregas {
   ativas: boolean;
   taxaEntrega: number;
   formasPagamento: string[];
+  modoTaxa: 'fixa' | 'distancia';
+  faixas: FaixaEntrega[];
+  origem: { latitude: number; longitude: number } | null;
 }

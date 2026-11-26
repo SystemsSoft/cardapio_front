@@ -1,11 +1,11 @@
-import { BarChart3, Bike, ChefHat, CheckCircle2, Copy, ExternalLink, Map as IconeMapa, MapPin, MessageCircle, Navigation, Phone, Printer, X } from 'lucide-react';
-import { Suspense, lazy, useCallback, useEffect, useState } from 'react';
+import { BarChart3, Bike, ChefHat, CheckCircle2, CircleDollarSign, Copy, ExternalLink, LocateFixed, Map as IconeMapa, MapPin, MessageCircle, Navigation, Phone, Plus, Printer, Radar, Search, Trash2, X } from 'lucide-react';
+import { Suspense, lazy, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { QrCode } from '../../components/comuns';
 import { Abas, Aviso, Botao, Carregando, Entrada, Interruptor, Janela, Selo, Titulo, Vazio, cx, useAvisos } from '../../components/ui';
 import { textoAdicionais } from '../../lib/adicionais';
 import { gestao, mensagemDe, urlBaseSalva } from '../../lib/api';
 import { centavosDoTexto, reais, telefone, tempoDesde, textoDosCentavos } from '../../lib/formato';
-import { linkBusca, linkMapa, linkRota } from '../../lib/geo';
+import { CORES_FAIXAS, km, kmFaixa, linkBusca, linkMapa, linkRota, obterPosicao, posicaoDoEndereco } from '../../lib/geo';
 import type { ConfigEntregas, Entrega, StatusEntrega } from '../../lib/tipos';
 import { useAgora } from '../../components/comuns';
 import { useGestao } from './contexto';
@@ -112,7 +112,7 @@ export default function Entregas() {
         <>
           <div className="md:hidden">
             <Abas<StatusEntrega> className="mb-4" atual={aba} aoMudar={setAba} abas={COLUNAS.map((c) => ({ valor: c.status, rotulo: c.titulo, contador: por(c.status).length }))} />
-            <Coluna entregas={por(aba)} agora={agora} aoMudar={mudar} taxaPadrao={config.taxaEntrega} aoTaxa={mudarTaxa} />
+            <Coluna entregas={por(aba)} agora={agora} aoMudar={mudar} taxaPadrao={config.modoTaxa === 'distancia' ? Math.max(0, ...config.faixas.map((f) => f.taxa)) : config.taxaEntrega} aoTaxa={mudarTaxa} />
           </div>
           <div className="hidden gap-4 md:grid md:grid-cols-2 xl:grid-cols-4">
             {COLUNAS.map((c) => {
@@ -124,7 +124,7 @@ export default function Entregas() {
                     {c.titulo}
                     <span className="ml-auto rounded-full bg-white px-2 text-xs text-stone-600">{lista.length}</span>
                   </h2>
-                  <Coluna entregas={lista} agora={agora} aoMudar={mudar} taxaPadrao={config.taxaEntrega} aoTaxa={mudarTaxa} />
+                  <Coluna entregas={lista} agora={agora} aoMudar={mudar} taxaPadrao={config.modoTaxa === 'distancia' ? Math.max(0, ...config.faixas.map((f) => f.taxa)) : config.taxaEntrega} aoTaxa={mudarTaxa} />
                 </section>
               );
             })}
@@ -139,19 +139,162 @@ export default function Entregas() {
   );
 }
 
+function resumoTaxa(c: ConfigEntregas) {
+  if (c.modoTaxa === 'distancia' && c.faixas.length) {
+    const valores = c.faixas.map((f) => f.taxa);
+    const min = Math.min(...valores);
+    const max = Math.max(...valores);
+    const faixa = min === max ? (min ? reais(min) : 'grátis') : `${min ? reais(min) : 'grátis'} a ${reais(max)}`;
+    return `Por distância · ${faixa} · até ${kmFaixa(c.faixas[c.faixas.length - 1].ateKm)}`;
+  }
+  return c.taxaEntrega ? `${reais(c.taxaEntrega)} para qualquer endereço` : 'Entrega grátis';
+}
+
 function ConfiguracaoEntregas({ config, aoSalvar, aoDivulgar }: { config: ConfigEntregas; aoSalvar: (c: ConfigEntregas) => void; aoDivulgar: () => void }) {
   const { avisar } = useAvisos();
-  const [taxa, setTaxa] = useState(config.taxaEntrega ? textoDosCentavos(config.taxaEntrega) : '');
-  const [salvando, setSalvando] = useState(false);
+  const [taxa, setTaxa] = useState(false);
 
-  const salvar = async (ativas: boolean) => {
-    const centavos = taxa.trim() ? centavosDoTexto(taxa) : 0;
-    if (centavos == null) return avisar('Taxa de entrega inválida.', 'erro');
-    setSalvando(true);
+  const ativar = async (ativas: boolean) => {
     try {
-      const c = await gestao.put<ConfigEntregas>('/entregas/config', { ativas, taxaEntrega: centavos });
+      const c = await gestao.put<ConfigEntregas>('/entregas/config', { ativas, taxaEntrega: config.taxaEntrega });
       aoSalvar(c);
       avisar(c.ativas ? 'Entregas ativas: o link de delivery já recebe pedidos.' : 'Entregas pausadas: o link avisa que não está recebendo pedidos.');
+    } catch (e) {
+      avisar(mensagemDe(e), 'erro');
+    }
+  };
+
+  return (
+    <section className="cartao mb-5 flex flex-col gap-4 p-4 xl:flex-row xl:items-center">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <Interruptor ligado={config.ativas} rotulo="Receber pedidos de entrega" aoMudar={(v) => ativar(v)} />
+        <div className="min-w-0">
+          <p className="font-semibold">{config.ativas ? 'Recebendo pedidos de entrega' : 'Entregas pausadas'}</p>
+          <p className="text-xs text-stone-500">{config.ativas ? 'O link e o QR Code de entrega estão aceitando pedidos.' : 'Quem abrir o link vê que o restaurante não está entregando agora.'}</p>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-wide text-stone-500">Taxa de entrega</p>
+          <p className="text-sm font-semibold text-stone-800">{resumoTaxa(config)}</p>
+        </div>
+        <Botao variante="secundario" icone={<Radar className="h-4 w-4" />} onClick={() => setTaxa(true)}>
+          {config.modoTaxa === 'distancia' ? 'Ajustar taxa' : 'Taxa por distância'}
+        </Botao>
+        <Botao variante="fantasma" onClick={aoDivulgar}>
+          Ver link
+        </Botao>
+      </div>
+      {taxa && (
+        <JanelaTaxa
+          config={config}
+          aoFechar={() => setTaxa(false)}
+          aoSalvar={(c) => {
+            aoSalvar(c);
+            setTaxa(false);
+          }}
+        />
+      )}
+    </section>
+  );
+}
+
+interface LinhaFaixa {
+  id: number;
+  km: string;
+  taxa: string;
+}
+
+const FAIXAS_INICIAIS: LinhaFaixa[] = [
+  { id: 1, km: '1', taxa: '5,00' },
+  { id: 2, km: '3', taxa: '8,00' },
+  { id: 3, km: '5', taxa: '12,00' },
+];
+const numeroKm = (s: string) => Number(s.replace(',', '.'));
+
+/** Taxa fixa ou por distância: o restaurante marca onde fica no mapa e define faixas de raio (a partir de 1 km). */
+function JanelaTaxa({ config, aoFechar, aoSalvar }: { config: ConfigEntregas; aoFechar: () => void; aoSalvar: (c: ConfigEntregas) => void }) {
+  const { restaurante } = useGestao();
+  const { avisar } = useAvisos();
+  const [modo, setModo] = useState(config.modoTaxa);
+  const [fixa, setFixa] = useState(config.taxaEntrega ? textoDosCentavos(config.taxaEntrega) : '');
+  const [faixas, setFaixas] = useState<LinhaFaixa[]>(() =>
+    config.faixas.length ? config.faixas.map((f, i) => ({ id: i + 1, km: String(f.ateKm).replace('.', ','), taxa: f.taxa ? textoDosCentavos(f.taxa) : '' })) : FAIXAS_INICIAIS,
+  );
+  const [origem, setOrigem] = useState(config.origem);
+  const [buscando, setBuscando] = useState<'' | 'aparelho' | 'endereco'>('');
+  const [dica, setDica] = useState<{ texto: string; erro?: boolean } | null>(null);
+  const [salvando, setSalvando] = useState(false);
+
+  const ordenadas = [...faixas].filter((f) => numeroKm(f.km) > 0).sort((a, b) => numeroKm(a.km) - numeroKm(b.km));
+  const corDe = (f: LinhaFaixa) => CORES_FAIXAS[Math.max(0, ordenadas.indexOf(f)) % CORES_FAIXAS.length];
+  const circulos = ordenadas.map((f) => ({ raioKm: numeroKm(f.km), cor: corDe(f) }));
+  const maior = ordenadas[ordenadas.length - 1];
+
+  const buscarEndereco = async () => {
+    if (!restaurante?.endereco) return setDica({ texto: 'Cadastre o endereço do restaurante em Dados e assinatura, ou use a localização deste aparelho.', erro: true });
+    setBuscando('endereco');
+    setDica(null);
+    const p = await posicaoDoEndereco(restaurante.endereco);
+    setBuscando('');
+    if (!p) return setDica({ texto: `Não achamos "${restaurante.endereco}" no mapa. Use a localização deste aparelho ou toque no mapa no lugar certo.`, erro: true });
+    setOrigem(p);
+    setDica({ texto: 'Achamos o endereço cadastrado. Confira se o pino está na porta do restaurante; se não, arraste-o.' });
+  };
+  const usarAparelho = async () => {
+    setBuscando('aparelho');
+    setDica(null);
+    try {
+      const p = await obterPosicao();
+      setOrigem({ latitude: p.latitude, longitude: p.longitude });
+      setDica({ texto: 'Pino colocado onde este aparelho está. Confira se é a porta do restaurante.' });
+    } catch (e) {
+      setDica({ texto: e instanceof Error ? e.message : 'Não foi possível achar a localização.', erro: true });
+    } finally {
+      setBuscando('');
+    }
+  };
+
+  // Primeira vez por distância: já procura o endereço cadastrado para o restaurante não começar do zero.
+  useEffect(() => {
+    if (modo === 'distancia' && !origem && !buscando) buscarEndereco();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modo]);
+
+  const mudarFaixa = (id: number, campo: 'km' | 'taxa', v: string) => setFaixas((l) => l.map((f) => (f.id === id ? { ...f, [campo]: v } : f)));
+  const adicionar = () => {
+    const ultimo = maior ? numeroKm(maior.km) : 0;
+    const taxaUltima = maior ? centavosDoTexto(maior.taxa) ?? 0 : 500;
+    setFaixas((l) => [...l, { id: Math.max(0, ...l.map((f) => f.id)) + 1, km: String(Math.min(50, Math.floor(ultimo) + 2)), taxa: textoDosCentavos(taxaUltima + 300) }]);
+  };
+
+  const salvar = async () => {
+    const taxaFixa = fixa.trim() ? centavosDoTexto(fixa) : 0;
+    if (taxaFixa == null) return avisar('Taxa fixa inválida.', 'erro');
+    const lista = [];
+    for (const f of faixas) {
+      const k = numeroKm(f.km);
+      if (!f.km.trim() || !Number.isFinite(k) || k < 1 || k > 50) return avisar('Cada faixa precisa ter uma distância de 1 a 50 km.', 'erro');
+      const v = f.taxa.trim() ? centavosDoTexto(f.taxa) : 0;
+      if (v == null) return avisar(`Confira o valor da faixa de até ${f.km} km.`, 'erro');
+      lista.push({ ateKm: k, taxa: v });
+    }
+    if (new Set(lista.map((f) => f.ateKm)).size !== lista.length) return avisar('Há duas faixas com a mesma distância.', 'erro');
+    if (modo === 'distancia') {
+      if (!origem) return avisar('Marque no mapa onde fica o restaurante.', 'erro');
+      if (!lista.length) return avisar('Adicione pelo menos uma faixa de distância.', 'erro');
+    }
+    setSalvando(true);
+    try {
+      const c = await gestao.put<ConfigEntregas>('/entregas/taxa', {
+        modoTaxa: modo,
+        taxaEntrega: taxaFixa,
+        faixas: lista,
+        latitude: origem?.latitude ?? null,
+        longitude: origem?.longitude ?? null,
+      });
+      avisar(c.modoTaxa === 'distancia' ? 'Taxa por distância salva: o cliente vê o valor pela localização dele.' : 'Taxa de entrega salva.');
+      aoSalvar(c);
     } catch (e) {
       avisar(mensagemDe(e), 'erro');
     } finally {
@@ -159,31 +302,143 @@ function ConfiguracaoEntregas({ config, aoSalvar, aoDivulgar }: { config: Config
     }
   };
 
+  const opcao = (valor: 'fixa' | 'distancia', icone: ReactNode, titulo: string, texto: string) => (
+    <button
+      type="button"
+      role="radio"
+      aria-checked={modo === valor}
+      onClick={() => setModo(valor)}
+      className={cx(
+        'flex items-start gap-3 rounded-2xl border-2 p-3 text-left transition sm:p-4',
+        modo === valor ? 'border-marca bg-marca-clara' : 'border-stone-200 bg-white hover:border-stone-300',
+      )}
+    >
+      <span className={cx('flex h-10 w-10 shrink-0 items-center justify-center rounded-xl', modo === valor ? 'bg-marca text-white' : 'bg-stone-100 text-stone-600')}>{icone}</span>
+      <span className="min-w-0">
+        <span className="block font-bold leading-tight">{titulo}</span>
+        <span className="mt-0.5 block text-xs leading-snug text-stone-600">{texto}</span>
+      </span>
+    </button>
+  );
+
   return (
-    <section className="cartao mb-5 flex flex-col gap-4 p-4 sm:flex-row sm:items-center">
-      <div className="flex min-w-0 flex-1 items-center gap-3">
-        <Interruptor ligado={config.ativas} rotulo="Receber pedidos de entrega" aoMudar={(v) => salvar(v)} />
-        <div className="min-w-0">
-          <p className="font-semibold">{config.ativas ? 'Recebendo pedidos de entrega' : 'Entregas pausadas'}</p>
-          <p className="text-xs text-stone-500">{config.ativas ? 'O link e o QR Code de entrega estão aceitando pedidos.' : 'Quem abrir o link vê que o restaurante não está entregando agora.'}</p>
+    <Janela
+      aberta
+      aoFechar={aoFechar}
+      titulo="Taxa de entrega"
+      largura="max-w-4xl"
+      cheiaNoCelular
+      rodape={
+        <Botao tamanho="g" largo carregando={salvando} onClick={salvar}>
+          Salvar taxa de entrega
+        </Botao>
+      }
+    >
+      <div className="space-y-5">
+        <div role="radiogroup" aria-label="Como cobrar a entrega" className="grid gap-2 sm:grid-cols-2">
+          {opcao('fixa', <CircleDollarSign className="h-5 w-5" />, 'Taxa fixa', 'O mesmo valor para qualquer endereço.')}
+          {opcao('distancia', <Radar className="h-5 w-5" />, 'Por distância', 'O valor muda conforme a distância entre o restaurante e o cliente.')}
         </div>
-      </div>
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="block">
-          <span className="rotulo">Taxa de entrega</span>
-          <div className="relative w-32">
-            <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-500">R$</span>
-            <Entrada id="taxa-entrega" value={taxa} onChange={(e) => setTaxa(e.target.value)} inputMode="decimal" placeholder="grátis" className="pl-9" />
+
+        {modo === 'fixa' ? (
+          <section className="rounded-2xl border border-stone-200 p-4">
+            <label className="block max-w-xs">
+              <span className="rotulo">Valor da entrega</span>
+              <div className="relative">
+                <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-stone-500">R$</span>
+                <Entrada id="taxa-fixa" value={fixa} onChange={(e) => setFixa(e.target.value)} inputMode="decimal" placeholder="grátis" className="pl-9" />
+              </div>
+            </label>
+            <p className="mt-2 text-sm text-stone-500">Deixe em branco para entrega grátis.</p>
+          </section>
+        ) : (
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_21rem]">
+            <section className="min-w-0 space-y-2">
+              <h3 className="flex items-center gap-2 font-bold">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-stone-900 text-xs text-white">1</span>
+                Onde fica o restaurante
+              </h3>
+              {origem ? (
+                <Suspense fallback={<div className="h-72 animate-pulse rounded-xl bg-stone-200 lg:h-96" />}>
+                  <Mapa
+                    latitude={origem.latitude}
+                    longitude={origem.longitude}
+                    editavel
+                    circulos={circulos}
+                    className="h-72 lg:h-96"
+                    aoMudar={(lat, lng) => setOrigem({ latitude: lat, longitude: lng })}
+                  />
+                </Suspense>
+              ) : (
+                <div className="flex h-72 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-stone-300 bg-stone-50 p-4 text-center text-sm text-stone-500 lg:h-96">
+                  <MapPin className="h-8 w-8 text-stone-300" />
+                  {buscando ? 'Procurando o restaurante no mapa…' : 'Marque a localização do restaurante para desenhar as faixas.'}
+                </div>
+              )}
+              <p className="text-xs text-stone-500">Arraste o pino ou toque no mapa para colocar na porta do restaurante. Os círculos são as faixas de distância.</p>
+              <div className="flex flex-wrap gap-2">
+                <Botao tamanho="p" variante="secundario" carregando={buscando === 'endereco'} icone={<Search className="h-4 w-4" />} onClick={buscarEndereco}>
+                  Buscar pelo endereço cadastrado
+                </Botao>
+                <Botao tamanho="p" variante="secundario" carregando={buscando === 'aparelho'} icone={<LocateFixed className="h-4 w-4" />} onClick={usarAparelho}>
+                  Usar a localização deste aparelho
+                </Botao>
+              </div>
+              {dica && <p className={cx('text-sm', dica.erro ? 'text-red-700' : 'text-emerald-800')}>{dica.texto}</p>}
+            </section>
+
+            <section className="space-y-2">
+              <h3 className="flex items-center gap-2 font-bold">
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-stone-900 text-xs text-white">2</span>
+                Faixas de distância
+              </h3>
+              <p className="text-xs text-stone-500">Distância em linha reta, a partir do restaurante. Deixe o valor em branco para entrega grátis na faixa.</p>
+              <ul className="space-y-2">
+                {faixas.map((f) => {
+                  const i = ordenadas.indexOf(f);
+                  const de = i > 0 ? numeroKm(ordenadas[i - 1].km) : 0;
+                  return (
+                    <li key={f.id} className="flex items-center gap-2 rounded-xl border border-stone-200 bg-white p-2 pl-3">
+                      <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: corDe(f) }} />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-stone-400">{i >= 0 ? `de ${kmFaixa(de)} até` : 'até'}</p>
+                        <div className="flex items-center gap-1">
+                          <Entrada
+                            aria-label="Distância máxima da faixa, em km"
+                            value={f.km}
+                            onChange={(e) => mudarFaixa(f.id, 'km', e.target.value.replace(/[^\d,.]/g, ''))}
+                            inputMode="decimal"
+                            className="h-9 w-16 px-2 text-center"
+                          />
+                          <span className="text-sm text-stone-600">km</span>
+                        </div>
+                      </div>
+                      <div className="relative w-28">
+                        <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-stone-500">R$</span>
+                        <Entrada aria-label="Taxa da faixa" value={f.taxa} onChange={(e) => mudarFaixa(f.id, 'taxa', e.target.value)} inputMode="decimal" placeholder="grátis" className="h-9 pl-8" />
+                      </div>
+                      <button type="button" onClick={() => setFaixas((l) => l.filter((x) => x.id !== f.id))} className="rounded-lg p-1.5 text-stone-400 hover:bg-red-50 hover:text-red-600" aria-label="Remover faixa">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+              {faixas.length < 12 && (
+                <button type="button" onClick={adicionar} className="flex w-full items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-stone-300 py-2.5 text-sm font-semibold text-stone-600 hover:border-marca hover:text-marca">
+                  <Plus className="h-4 w-4" /> Adicionar faixa
+                </button>
+              )}
+              {maior && (
+                <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                  Acima de <strong>{kmFaixa(numeroKm(maior.km))}</strong>, o cliente vê que o endereço está fora da área de entrega.
+                </p>
+              )}
+            </section>
           </div>
-        </label>
-        <Botao variante="secundario" carregando={salvando} onClick={() => salvar(config.ativas)}>
-          Salvar taxa
-        </Botao>
-        <Botao variante="fantasma" onClick={aoDivulgar}>
-          Ver link
-        </Botao>
+        )}
       </div>
-    </section>
+    </Janela>
   );
 }
 
@@ -233,9 +488,12 @@ function CartaoEntrega({ entrega: e, agora, aoMudar, taxaPadrao, aoTaxa }: { ent
           <EnderecoEntrega entrega={e} />
         </p>
         {temLocal && (
+          <span className="flex flex-wrap items-center gap-2">
           <button type="button" onClick={() => setVerMapa(true)} className="inline-flex items-center gap-1 rounded-lg bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-800 hover:bg-sky-100">
             <IconeMapa className="h-3.5 w-3.5" /> Ver no mapa
           </button>
+          {e.distanciaM != null && <span className="text-xs font-semibold text-stone-500">{km(e.distanciaM)} do restaurante</span>}
+          </span>
         )}
       </div>
       {verMapa && temLocal && <JanelaMapa entrega={e} aoFechar={() => setVerMapa(false)} />}

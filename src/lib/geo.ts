@@ -56,3 +56,35 @@ export const linkRota = (lat: number, lng: number, origem?: { latitude: number; 
   `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${origem ? `${origem.latitude}%2C${origem.longitude}` : ''}%3B${lat}%2C${lng}#map=16/${lat}/${lng}`;
 /** Busca do endereço digitado no OpenStreetMap (quando o cliente não marcou a localização). */
 export const linkBusca = (endereco: string) => `https://www.openstreetmap.org/search?query=${encodeURIComponent(`${endereco}, Brasil`)}`;
+
+/** Distância em linha reta (raio), em metros. */
+export function distanciaM(a: { latitude: number; longitude: number }, lat: number, lng: number) {
+  const r = Math.PI / 180;
+  const p1 = a.latitude * r;
+  const p2 = lat * r;
+  const h = Math.sin((p2 - p1) / 2) ** 2 + Math.cos(p1) * Math.cos(p2) * Math.sin(((lng - a.longitude) * r) / 2) ** 2;
+  return Math.round(2 * 6371000 * Math.asin(Math.sqrt(h)));
+}
+
+export const km = (m: number) => `${(m / 1000).toLocaleString('pt-BR', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km`;
+export const kmFaixa = (n: number) => `${n.toLocaleString('pt-BR', { maximumFractionDigits: 1 })} km`;
+
+/** Cores das faixas de distância: do verde (perto) ao vermelho (longe). */
+export const CORES_FAIXAS = ['#16a34a', '#65a30d', '#ca8a04', '#ea580c', '#dc2626', '#be123c', '#9d174d', '#7e22ce', '#4338ca', '#1d4ed8', '#0e7490', '#475569'];
+
+/** Ponto de um endereço digitado (OpenStreetMap), de preferência perto de `perto`. */
+export async function posicaoDoEndereco(texto: string, perto?: { latitude: number; longitude: number } | null): Promise<Posicao | null> {
+  try {
+    const p = new URLSearchParams({ format: 'jsonv2', limit: '1', countrycodes: 'br', 'accept-language': 'pt-BR', q: texto });
+    if (perto) {
+      const d = 0.35;
+      p.set('viewbox', `${perto.longitude - d},${perto.latitude + d},${perto.longitude + d},${perto.latitude - d}`);
+    }
+    const r = await fetch(`https://nominatim.openstreetmap.org/search?${p}`, { headers: { Accept: 'application/json' } });
+    if (!r.ok) return null;
+    const [a] = (await r.json()) as { lat: string; lon: string }[];
+    return a ? { latitude: Number(a.lat), longitude: Number(a.lon) } : null;
+  } catch {
+    return null;
+  }
+}

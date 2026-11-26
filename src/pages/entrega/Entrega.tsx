@@ -6,14 +6,35 @@ import { AreaTexto, Aviso, Botao, Carregando, Entrada, Janela, cx, useAvisos } f
 import { adicionaisEscolhidos, mesmosAdicionais, precoComAdicionais, textoAdicionais } from '../../lib/adicionais';
 import { api, mensagemDe } from '../../lib/api';
 import { centavosDoTexto, reais, telefone, tempoDesde } from '../../lib/formato';
-import { enderecoDaPosicao, obterPosicao } from '../../lib/geo';
+import { distanciaM, enderecoDaPosicao, km, kmFaixa, obterPosicao, posicaoDoEndereco } from '../../lib/geo';
 import { aplicarMarca } from '../../lib/marca';
-import type { Categoria, Entrega as PedidoEntrega, Produto, RestaurantePublico, StatusEntrega } from '../../lib/tipos';
+import type { Categoria, ConfigEntregas, Entrega as PedidoEntrega, Produto, RestaurantePublico, StatusEntrega } from '../../lib/tipos';
 import { FolhaProduto, ListaCardapio } from '../cliente/Mesa';
 
 const Mapa = lazy(() => import('../../components/Mapa'));
 
-type Info = RestaurantePublico & { ativas: boolean; taxaEntrega: number; formasPagamento: string[]; liberado: boolean };
+type Info = RestaurantePublico & Pick<ConfigEntregas, 'ativas' | 'taxaEntrega' | 'formasPagamento' | 'modoTaxa' | 'faixas' | 'origem'> & { liberado: boolean };
+
+/** Taxa de entrega para o ponto do cliente (igual ao cálculo do servidor, que é quem vale). */
+function calcularTaxa(info: Info, lat?: number | null, lng?: number | null) {
+  const distancia = info.origem && lat != null && lng != null ? distanciaM(info.origem, lat, lng) : null;
+  if (info.modoTaxa !== 'distancia') return { taxa: info.taxaEntrega, distancia, semLocal: false, fora: false };
+  if (distancia == null) return { taxa: null, distancia, semLocal: true, fora: false };
+  const f = info.faixas.find((x) => distancia <= x.ateKm * 1000);
+  return { taxa: f ? f.taxa : null, distancia, semLocal: false, fora: !f };
+}
+const limiteKm = (info: Info) => kmFaixa(info.faixas[info.faixas.length - 1]?.ateKm ?? 0);
+
+function textoTaxa(info: Info) {
+  if (info.modoTaxa === 'distancia') {
+    const v = info.faixas.map((f) => f.taxa);
+    const min = Math.min(...v);
+    const max = Math.max(...v);
+    const valor = min === max ? (min ? reais(min) : 'grátis') : `${min ? reais(min) : 'grátis'} a ${reais(max)}`;
+    return `Entrega ${valor} · até ${limiteKm(info)}`;
+  }
+  return info.taxaEntrega ? `Taxa de entrega ${reais(info.taxaEntrega)}` : 'Entrega grátis';
+}
 interface Item {
   chave: string;
   produtoId: number;
@@ -69,7 +90,7 @@ function Cabecalho({ info }: { info: Info }) {
         </div>
         <div className="min-w-0 pt-2">
           <h1 className="truncate text-xl font-extrabold tracking-tight">{info.nome}</h1>
-          <p className="truncate text-sm text-stone-600">{info.taxaEntrega ? `Taxa de entrega ${reais(info.taxaEntrega)}` : 'Entrega grátis'}</p>
+          <p className="truncate text-sm text-stone-600">{textoTaxa(info)}</p>
         </div>
       </div>
     </header>
@@ -215,9 +236,22 @@ function Finalizar({
   const [obs, setObs] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState('');
-  const total = subtotal + info.taxaEntrega;
+  const calc = calcularTaxa(info, d.latitude, d.longitude);
+  const porDistancia = info.modoTaxa === 'distancia';
+  const total = subtotal + (calc.taxa ?? 0);
   const mudar = (campo: keyof Dados, v: string) => setD((x) => ({ ...x, [campo]: v }));
   const [localizando, setLocalizando] = useState(false);
+  const [achando, setAchando] = useState(false);
+
+  const acharEndereco = async () => {
+    setAvisoLocal(null);
+    setAchando(true);
+    const p = await posicaoDoEndereco([d.endereco, d.bairro].filter((x) => x.trim()).join(', '), info.origem);
+    setAchando(false);
+    if (!p) return setAvisoLocal({ texto: 'Não achamos esse endereço no mapa. Confira a rua e o número, ou use a sua localização.', erro: true });
+    setD((x) => ({ ...x, latitude: p.latitude, longitude: p.longitude }));
+    setAvisoLocal({ texto: 'Endereço marcado no mapa. Confira se o pino está na sua porta; se não, arraste-o.' });
+  };
   const [avisoLocal, setAvisoLocal] = useState<{ texto: string; erro?: boolean } | null>(null);
   const temLocal = d.latitude != null && d.longitude != null;
 
@@ -255,6 +289,8 @@ function Finalizar({
     if (d.nome.trim().length < 2) return setErro('Informe o seu nome.');
     if (d.telefone.replace(/\D/g, '').length < 10) return setErro('Informe o telefone com DDD.');
     if (d.endereco.trim().length < 5) return setErro('Informe o endereço (rua e número).');
+    if (calc.semLocal) return setErro('Marque a sua localização no mapa: a taxa de entrega depende da distância.');
+    if (calc.fora) return setErro(`O seu endereço fica a ${km(calc.distancia!)}; este restaurante entrega até ${limiteKm(info)}.`);
     if (!forma) return setErro('Escolha a forma de pagamento.');
     const trocoPara = forma === 'Dinheiro' && troco.trim() ? centavosDoTexto(troco) : null;
     if (forma === 'Dinheiro' && troco.trim() && (trocoPara == null || trocoPara < total)) return setErro('O troco precisa ser para um valor maior que o total.');
@@ -326,7 +362,12 @@ function Finalizar({
           </ul>
           <dl className="mt-2 space-y-1 px-1 text-sm">
             <div className="flex justify-between"><dt className="text-stone-500">Subtotal</dt><dd>{reais(subtotal)}</dd></div>
-            <div className="flex justify-between"><dt className="text-stone-500">Entrega</dt><dd>{info.taxaEntrega ? reais(info.taxaEntrega) : 'grátis'}</dd></div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-stone-500">Entrega{calc.distancia != null && porDistancia && !calc.fora ? ` · ${km(calc.distancia)}` : ''}</dt>
+              <dd className={cx(calc.semLocal && 'text-amber-700', calc.fora && 'font-semibold text-red-700')}>
+                {calc.semLocal ? 'marque sua localização' : calc.fora ? 'fora da área de entrega' : calc.taxa ? reais(calc.taxa) : 'grátis'}
+              </dd>
+            </div>
             <div className="flex justify-between text-base font-bold"><dt>Total</dt><dd>{reais(total)}</dd></div>
           </dl>
         </section>
@@ -363,8 +404,26 @@ function Finalizar({
               </>
             )}
             {avisoLocal && <p className={cx('text-sm', avisoLocal.erro ? 'text-red-700' : 'text-emerald-800')}>{avisoLocal.texto}</p>}
+            {porDistancia && calc.semLocal && (
+              <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-900">A taxa de entrega depende da distância. Marque a sua localização para ver o valor.</p>
+            )}
+            {porDistancia && calc.fora && (
+              <p className="rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-800">
+                O seu endereço fica a {km(calc.distancia!)} do restaurante, que entrega até {limiteKm(info)}. Confira se o pino está no lugar certo.
+              </p>
+            )}
+            {porDistancia && !calc.semLocal && !calc.fora && (
+              <p className="text-sm font-medium text-emerald-800">
+                Você está a {km(calc.distancia!)} do restaurante: entrega {calc.taxa ? reais(calc.taxa) : 'grátis'}.
+              </p>
+            )}
           </div>
           <label className="block"><span className="rotulo">Endereço (rua e número)</span><Entrada id="ent-endereco" value={d.endereco} onChange={(e) => mudar('endereco', e.target.value)} maxLength={120} autoComplete="street-address" placeholder="Rua das Flores, 120" /></label>
+          {!temLocal && d.endereco.trim().length >= 5 && (
+            <button type="button" onClick={acharEndereco} disabled={achando} className="-mt-1 inline-flex items-center gap-1.5 text-sm font-semibold text-marca disabled:opacity-50">
+              <MapPin className="h-4 w-4" /> {achando ? 'Procurando no mapa…' : 'Mostrar este endereço no mapa'}
+            </button>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <label className="block"><span className="rotulo">Complemento</span><Entrada id="ent-complemento" value={d.complemento} onChange={(e) => mudar('complemento', e.target.value)} maxLength={60} placeholder="Apto, bloco…" /></label>
             <label className="block"><span className="rotulo">Bairro</span><Entrada id="ent-bairro" value={d.bairro} onChange={(e) => mudar('bairro', e.target.value)} maxLength={60} /></label>
