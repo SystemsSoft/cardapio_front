@@ -123,6 +123,9 @@ export interface Sessao {
   taxaServico: number;
   taxaServicoPercentual: number;
   total: number;
+  /** Só na resposta do fechamento: a NFC-e emitida junto (ou o motivo de não ter saído). */
+  nota?: Nota;
+  notaErro?: string;
 }
 
 export interface EstadoMesa {

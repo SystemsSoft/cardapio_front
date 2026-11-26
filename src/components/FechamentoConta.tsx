@@ -1,6 +1,6 @@
-import { Plus, Split, Trash2, Users } from 'lucide-react';
+import { Plus, Receipt, Split, Trash2, Users } from 'lucide-react';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { FORMAS_PAGAMENTO, centavosDoTexto, reais, textoDosCentavos } from '../lib/formato';
+import { FORMAS_PAGAMENTO, centavosDoTexto, cpfOuCnpj, cpfValido, reais, soDigitos, textoDosCentavos } from '../lib/formato';
 import type { Sessao } from '../lib/tipos';
 import { Abas, Aviso, Botao, Entrada, Janela, Selecao, cx } from './ui';
 
@@ -10,8 +10,23 @@ export interface PagamentoDividido {
   valor: number;
 }
 
-/** `taxaServicoPercentual`: taxa de serviço escolhida no fechamento (0 = sem taxa). */
-export type DadosFechamento = ({ formaPagamento: string } | { pagamentos: PagamentoDividido[] }) & { taxaServicoPercentual: number };
+/** `taxaServicoPercentual`: taxa de serviço escolhida no fechamento (0 = sem taxa).
+ *  `notaFiscal`: emitir ou não a NFC-e logo depois de fechar (CPF e valor recebido são opcionais). */
+export type DadosFechamento = ({ formaPagamento: string } | { pagamentos: PagamentoDividido[] }) & {
+  taxaServicoPercentual: number;
+  notaFiscal: { emitir: boolean; cpf?: string | null; valorRecebido?: number | null };
+};
+
+/** Mensagem depois de fechar: a conta e, se pediu, a situação da nota fiscal. */
+export function avisoDoFechamento(numero: number, r: Sessao): [string, 'ok' | 'erro' | 'info'] {
+  const base = `Mesa ${numero} fechada · ${reais(r.total)}${r.pagamentos?.length ? ` · dividida em ${r.pagamentos.length}` : ''}`;
+  if (r.notaErro) return [`${base}. A nota fiscal não saiu: ${r.notaErro}`, 'erro'];
+  const n = r.nota;
+  if (!n) return [base, 'ok'];
+  if (n.status === 'autorizada') return [`${base} · NFC-e nº ${n.numero} autorizada`, 'ok'];
+  if (n.status === 'rejeitada') return [`${base}. A Sefaz recusou a nota: ${n.motivo || 'sem motivo informado'}. Emita de novo em Histórico.`, 'erro'];
+  return [`${base} · NFC-e nº ${n.numero} em contingência: será enviada à Sefaz automaticamente`, 'info'];
+}
 
 const OPCOES_TAXA = [8, 10, 12, 15];
 
@@ -84,12 +99,15 @@ export function JanelaFechamento({
   sessao,
   caixaAberto = true,
   avisoCaixaFechado,
+  notaFiscal = false,
   aoFechar,
   aoConfirmar,
 }: {
   titulo: string;
   sessao: Sessao;
   caixaAberto?: boolean;
+  /** NFC-e configurada: oferece emitir (ou não) a nota ao fechar. */
+  notaFiscal?: boolean;
   avisoCaixaFechado?: ReactNode;
   aoFechar: () => void;
   aoConfirmar: (dados: DadosFechamento) => Promise<void>;
@@ -102,6 +120,14 @@ export function JanelaFechamento({
   const total = sessao.subtotal + taxa;
 
   const pessoas = useMemo(() => consumoPorPessoa(sessao, taxa), [sessao, taxa]);
+
+  // Nota fiscal: já vem marcada para emitir quando a NFC-e está configurada; o caixa pode desmarcar.
+  const [emitirNota, setEmitirNota] = useState(true);
+  const [cpf, setCpf] = useState('');
+  const [recebido, setRecebido] = useState('');
+  const emitir = notaFiscal && emitirNota;
+  const cpfErrado = emitir && soDigitos(cpf).length > 0 && !cpfValido(cpf);
+  const valorRecebido = centavosDoTexto(recebido);
   const nomesReais = pessoas.filter((p) => p.nome !== 'Sem nome').map((p) => p.nome);
   const sugerir = pessoas.length >= 2;
 
@@ -184,13 +210,19 @@ export function JanelaFechamento({
     setLinhas((ls) => ls.map((l) => (l.id === ultima.id ? { ...l, valor: textoDosCentavos(novo) } : l)));
   };
 
+  const nota = {
+    emitir,
+    cpf: emitir ? soDigitos(cpf) || null : null,
+    valorRecebido: emitir && !dividir && formaJunto === 'Dinheiro' && valorRecebido ? valorRecebido : null,
+  };
+
   const confirmar = async () => {
     setEnviando(true);
     try {
       await aoConfirmar(
         dividir
-          ? { pagamentos: linhas.map((l, i) => ({ nome: l.nome.trim() || `Pessoa ${i + 1}`, formaPagamento: l.forma, valor: valores[i] })), taxaServicoPercentual: pct }
-          : { formaPagamento: formaJunto, taxaServicoPercentual: pct },
+          ? { pagamentos: linhas.map((l, i) => ({ nome: l.nome.trim() || `Pessoa ${i + 1}`, formaPagamento: l.forma, valor: valores[i] })), taxaServicoPercentual: pct, notaFiscal: nota }
+          : { formaPagamento: formaJunto, taxaServicoPercentual: pct, notaFiscal: nota },
       );
     } finally {
       setEnviando(false);
@@ -225,10 +257,11 @@ export function JanelaFechamento({
               tamanho="g"
               variante="sucesso"
               carregando={enviando}
-              disabled={pctLido == null || (dividir ? !divisaoOk : !formaJunto)}
+              disabled={pctLido == null || cpfErrado || (dividir ? !divisaoOk : !formaJunto)}
               onClick={confirmar}
             >
-              {dividir ? `Fechar conta dividida · ${reais(total)}` : `Fechar conta · ${reais(total)}`}
+              {dividir ? 'Fechar conta dividida' : 'Fechar conta'}
+              {emitir ? ' e emitir nota' : ''} · {reais(total)}
             </Botao>
           </div>
         )
@@ -393,6 +426,67 @@ export function JanelaFechamento({
             {semForma > 0 && diferenca === 0 && <p className="text-xs font-medium text-amber-700">Escolha a forma de pagamento de cada pessoa.</p>}
           </div>
         )}
+
+        <div className="rounded-xl border border-stone-200 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="flex items-center gap-2 text-sm font-semibold">
+              <Receipt className="h-4 w-4 text-stone-500" />
+              Nota fiscal (NFC-e)
+            </p>
+            {notaFiscal && (
+              <div role="group" aria-label="Emitir nota fiscal" className="inline-flex rounded-full bg-stone-100 p-0.5">
+                {(
+                  [
+                    [true, 'Emitir nota'],
+                    [false, 'Não emitir'],
+                  ] as const
+                ).map(([valor, rotulo]) => (
+                  <button
+                    key={rotulo}
+                    type="button"
+                    aria-pressed={emitirNota === valor}
+                    onClick={() => setEmitirNota(valor)}
+                    className={cx(
+                      'rounded-full px-3 py-1.5 text-sm font-semibold transition',
+                      emitirNota === valor ? 'bg-white text-stone-900 shadow-sm ring-1 ring-stone-200' : 'text-stone-500 hover:text-stone-800',
+                    )}
+                  >
+                    {rotulo}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {!notaFiscal ? (
+            <p className="mt-1 text-xs text-stone-500">A nota fiscal ainda não está configurada. Depois de configurada em Configurar nota fiscal, ela pode ser emitida aqui ao fechar a conta.</p>
+          ) : emitirNota ? (
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <label className="block">
+                <span className="rotulo">CPF na nota (opcional)</span>
+                <Entrada
+                  id="nota-cpf"
+                  value={cpf}
+                  onChange={(e) => setCpf(cpfOuCnpj(soDigitos(e.target.value).slice(0, 11)))}
+                  inputMode="numeric"
+                  placeholder="Só se o cliente pedir"
+                  className={cx(cpfErrado && 'border-red-400')}
+                />
+                {cpfErrado && <span className="mt-1 block text-xs font-medium text-red-700">CPF inválido. Confira os números ou deixe em branco.</span>}
+              </label>
+              {!dividir && formaJunto === 'Dinheiro' && (
+                <label className="block">
+                  <span className="rotulo">Valor recebido (opcional)</span>
+                  <Entrada id="nota-recebido" value={recebido} onChange={(e) => setRecebido(e.target.value)} inputMode="decimal" placeholder="0,00" />
+                  <span className="mt-1 block text-xs text-stone-500">
+                    {valorRecebido && valorRecebido > total ? `Troco: ${reais(valorRecebido - total)}` : 'Para o troco sair na nota.'}
+                  </span>
+                </label>
+              )}
+            </div>
+          ) : (
+            <p className="mt-1 text-xs text-stone-500">A conta fecha sem nota. Se precisar, emita depois em Histórico.</p>
+          )}
+        </div>
       </div>
     </Janela>
   );

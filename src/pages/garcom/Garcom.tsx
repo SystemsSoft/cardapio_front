@@ -2,7 +2,7 @@ import { Bell, BellOff, BellRing, CheckCheck, NotebookPen, QrCode as QrCodeIcon,
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useAgora } from '../../components/comuns';
-import { JanelaFechamento } from '../../components/FechamentoConta';
+import { JanelaFechamento, avisoDoFechamento } from '../../components/FechamentoConta';
 import { PainelQrMesa, linkDaMesa } from '../../components/QrMesa';
 import { Abas, Aviso, Botao, Campo, Carregando, Entrada, Janela, Selo, cx, useAvisos } from '../../components/ui';
 import { api, mensagemDe, nomeSalvo } from '../../lib/api';
@@ -10,7 +10,7 @@ import { reais, tempoDesde } from '../../lib/formato';
 import { aplicarMarca } from '../../lib/marca';
 import { liberarSom, tocar } from '../../lib/som';
 import { useTempoReal } from '../../lib/tempoReal';
-import type { Marca, MesaGestao, Pedido } from '../../lib/tipos';
+import type { Marca, MesaGestao, Pedido, Sessao } from '../../lib/tipos';
 import MesaGarcom from './MesaGarcom';
 import PedidoGarcom from './PedidoGarcom';
 
@@ -19,6 +19,8 @@ interface Estado {
   marca: Marca;
   chavePublica: string;
   caixaAberto?: boolean;
+  /** NFC-e configurada: o fechamento da conta oferece emitir a nota. */
+  notaFiscal?: boolean;
   mesas: MesaGestao[];
 }
 
@@ -264,6 +266,7 @@ export default function Garcom() {
           titulo={`Fechar conta · Mesa ${fechar.numero}`}
           sessao={fechar.sessao}
           caixaAberto={estado.caixaAberto !== false}
+          notaFiscal={estado.notaFiscal === true}
           avisoCaixaFechado={
             <Aviso tipo="alerta" titulo="O caixa está fechado">
               Peça ao gerente para abrir o caixa antes de fechar a conta.
@@ -272,8 +275,8 @@ export default function Garcom() {
           aoFechar={() => setFechar(null)}
           aoConfirmar={async (dados) => {
             try {
-              await api.post(`/garcom/${rid}/mesas/${fechar.numero}/fechar${q}`, { ...dados, garcom: nomeSalvo.ler() || '' });
-              avisar(`Mesa ${fechar.numero} fechada.`);
+              const resumo = await api.post<Sessao>(`/garcom/${rid}/mesas/${fechar.numero}/fechar${q}`, { ...dados, garcom: nomeSalvo.ler() || '' });
+              avisar(...avisoDoFechamento(fechar.numero, resumo));
               setFechar(null);
               setTelaMesa(null);
               carregar();

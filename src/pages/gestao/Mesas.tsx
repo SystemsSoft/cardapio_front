@@ -2,12 +2,12 @@ import { BellRing, Clock, Lock, LockOpen, Receipt, Wallet } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAgora } from '../../components/comuns';
-import { JanelaFechamento, type DadosFechamento } from '../../components/FechamentoConta';
+import { JanelaFechamento, avisoDoFechamento, type DadosFechamento } from '../../components/FechamentoConta';
 import { Abas, Aviso, Botao, Carregando, Janela, Selo, Titulo, Vazio, cx, useAvisos } from '../../components/ui';
 import { gestao, mensagemDe } from '../../lib/api';
 import { dataHora, hora, plural, reais, tempoDesde } from '../../lib/formato';
 import type { ConfigFiscal, Fechamento, MesaGestao, Sessao } from '../../lib/tipos';
-import { CartaoPedido, JanelaEmitirNota } from './compartilhado';
+import { CartaoPedido } from './compartilhado';
 import { useGestao } from './contexto';
 
 type Filtro = 'todas' | 'ocupadas' | 'alertas' | 'livres';
@@ -35,11 +35,10 @@ export default function Mesas() {
   const agora = useAgora();
   const [filtro, setFiltro] = useState<Filtro>('todas');
   const [aberta, setAberta] = useState<number | null>(null);
-  const [notaPara, setNotaPara] = useState<Sessao | null>(null);
   const [ocupadoCaixa, setOcupadoCaixa] = useState(false);
   const [fiscalPronto, setFiscalPronto] = useState(false);
 
-  // Só oferece a NFC-e ao fechar a conta se a nota fiscal já estiver configurada.
+  // A opção "emitir nota fiscal" ao fechar a conta só aparece com a NFC-e configurada.
   useEffect(() => {
     gestao
       .get<ConfigFiscal>('/fiscal')
@@ -211,14 +210,11 @@ export default function Mesas() {
           mesa={mesaAberta}
           caixaAberto={r.aberto}
           aoAbrirCaixa={abrirCaixa}
+          notaFiscal={fiscalPronto}
           aoFechar={() => setAberta(null)}
-          aoFecharConta={(s) => {
-            setAberta(null);
-            if (fiscalPronto) setNotaPara(s);
-          }}
+          aoFecharConta={() => setAberta(null)}
         />
       )}
-      <JanelaEmitirNota sessao={notaPara} aoFechar={() => setNotaPara(null)} />
     </>
   );
 }
@@ -236,12 +232,14 @@ function Resumo({ rotulo, valor, detalhe }: { rotulo: string; valor: string; det
 function DetalheMesa({
   mesa,
   caixaAberto,
+  notaFiscal,
   aoAbrirCaixa,
   aoFechar,
   aoFecharConta,
 }: {
   mesa: MesaGestao;
   caixaAberto: boolean;
+  notaFiscal: boolean;
   aoAbrirCaixa: () => void;
   aoFechar: () => void;
   aoFecharConta: (s: Sessao) => void;
@@ -261,7 +259,7 @@ function DetalheMesa({
   const fechar = async (dados: DadosFechamento) => {
     try {
       const resumo = await gestao.post<Sessao>(`/mesas/${mesa.numero}/fechar`, dados);
-      avisar(`Mesa ${mesa.numero} fechada · ${reais(resumo.total)}${resumo.pagamentos?.length ? ` · dividida em ${resumo.pagamentos.length}` : ''}`);
+      avisar(...avisoDoFechamento(mesa.numero, resumo));
       aoFecharConta(resumo);
     } catch (e) {
       avisar(mensagemDe(e), 'erro');
@@ -269,7 +267,7 @@ function DetalheMesa({
   };
 
   if (modoFechar && s) {
-    return <JanelaFechamento titulo={`Fechar conta · Mesa ${mesa.numero}`} sessao={s} aoFechar={() => setModoFechar(false)} aoConfirmar={fechar} />;
+    return <JanelaFechamento titulo={`Fechar conta · Mesa ${mesa.numero}`} sessao={s} notaFiscal={notaFiscal} aoFechar={() => setModoFechar(false)} aoConfirmar={fechar} />;
   }
 
   return (
