@@ -240,7 +240,10 @@ export interface Fechamento {
   abertoEm: string;
   fechadoEm: string | null;
   mesasFechadas: number;
+  /** Mesas + entregas, sem taxa de serviço e sem taxa de entrega. */
   faturamentoSubtotal: number;
+  entregas: number;
+  faturamentoEntregas: number;
 }
 
 export interface ItemEstoque extends Produto {

@@ -1,4 +1,4 @@
-import { Bike, ChefHat, CheckCircle2, Copy, ExternalLink, MapPin, MessageCircle, Phone, Printer, X } from 'lucide-react';
+import { BarChart3, Bike, ChefHat, CheckCircle2, Copy, ExternalLink, MapPin, MessageCircle, Phone, Printer, X } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { QrCode } from '../../components/comuns';
 import { Abas, Aviso, Botao, Carregando, Entrada, Interruptor, Janela, Selo, Titulo, Vazio, cx, useAvisos } from '../../components/ui';
@@ -37,6 +37,7 @@ export default function Entregas() {
   const [erro, setErro] = useState('');
   const [aba, setAba] = useState<StatusEntrega>('recebido');
   const [divulgar, setDivulgar] = useState(false);
+  const [relatorio, setRelatorio] = useState(false);
 
   const carregar = useCallback(
     () =>
@@ -87,9 +88,14 @@ export default function Entregas() {
         titulo="Entregas"
         subtitulo="Pedidos de delivery feitos pelo link e pelo QR Code de entrega. Atualiza sozinho."
         acoes={
-          <Botao variante="secundario" icone={<ExternalLink className="h-4 w-4" />} onClick={() => setDivulgar(true)}>
-            Link e QR Code
-          </Botao>
+          <div className="flex flex-wrap gap-2">
+            <Botao icone={<BarChart3 className="h-4 w-4" />} onClick={() => setRelatorio(true)}>
+              Relatório do período
+            </Botao>
+            <Botao variante="secundario" icone={<ExternalLink className="h-4 w-4" />} onClick={() => setDivulgar(true)}>
+              Link e QR Code
+            </Botao>
+          </div>
         }
       />
 
@@ -124,6 +130,7 @@ export default function Entregas() {
         </>
       )}
 
+      {relatorio && <JanelaRelatorio aoFechar={() => setRelatorio(false)} />}
       {divulgar && <JanelaDivulgar link={link} restaurante={restaurante.nome} aoFechar={() => setDivulgar(false)} />}
     </>
   );
@@ -304,3 +311,105 @@ function JanelaDivulgar({ link, restaurante, aoFechar }: { link: string; restaur
     </Janela>
   );
 }
+
+interface Relatorio {
+  caixaAberto: boolean;
+  abertoEm?: string;
+  ultimoFechamentoEm?: string | null;
+  entregues?: number;
+  vendido?: number;
+  taxas?: number;
+  total?: number;
+  ticketMedio?: number;
+  porForma?: { forma: string; valor: number }[];
+  emAndamento?: { quantidade: number; valor: number };
+  cancelados?: { quantidade: number; valor: number };
+  pedidos?: { id: number; clienteNome: string; bairro: string; formaPagamento: string; total: number; taxaEntrega: number; entregueEm: string }[];
+}
+
+/** Quanto foi vendido em entregas desde a abertura do caixa (o mesmo período de "Vendido no período" em Mesas). */
+function JanelaRelatorio({ aoFechar }: { aoFechar: () => void }) {
+  const [r, setR] = useState<Relatorio | null>(null);
+  const [erro, setErro] = useState('');
+  useEffect(() => {
+    gestao
+      .get<Relatorio>('/entregas/relatorio')
+      .then(setR)
+      .catch((e) => setErro(mensagemDe(e)));
+  }, []);
+
+  return (
+    <Janela aberta aoFechar={aoFechar} titulo="Entregas do período" largura="max-w-xl" cheiaNoCelular>
+      {erro ? (
+        <Aviso tipo="erro">{erro}</Aviso>
+      ) : !r ? (
+        <Carregando />
+      ) : !r.caixaAberto ? (
+        <Aviso tipo="info" titulo="O caixa está fechado">
+          O relatório mostra as entregas desde a abertura do caixa. Abra o caixa na tela de Mesas para começar um novo período.
+          {r.ultimoFechamentoEm && ` O último período foi fechado em ${dataHoraCurta(r.ultimoFechamentoEm)} e está em Fechamentos de caixa.`}
+        </Aviso>
+      ) : (
+        <div className="space-y-5">
+          <p className="text-sm text-stone-500">Desde a abertura do caixa, em {dataHoraCurta(r.abertoEm!)}, até agora.</p>
+          <div className="grid grid-cols-2 gap-3">
+            <Numero rotulo="Total recebido" valor={reais(r.total)} destaque />
+            <Numero rotulo="Pedidos entregues" valor={String(r.entregues)} />
+            <Numero rotulo="Vendido em itens" valor={reais(r.vendido)} />
+            <Numero rotulo="Taxas de entrega" valor={reais(r.taxas)} />
+            <Numero rotulo="Ticket médio" valor={reais(r.ticketMedio)} />
+            <Numero rotulo="Em andamento" valor={`${r.emAndamento!.quantidade} · ${reais(r.emAndamento!.valor)}`} />
+          </div>
+          {!!r.porForma?.length && (
+            <div className="rounded-xl bg-stone-50 p-4">
+              <p className="mb-2 text-sm font-semibold">Por forma de pagamento</p>
+              {r.porForma.map((f) => (
+                <p key={f.forma} className="flex justify-between text-sm">
+                  <span>{f.forma}</span>
+                  <b>{reais(f.valor)}</b>
+                </p>
+              ))}
+            </div>
+          )}
+          {r.cancelados!.quantidade > 0 && (
+            <p className="text-sm text-stone-500">
+              {r.cancelados!.quantidade} cancelado(s) no período ({reais(r.cancelados!.valor)}), fora dos valores acima.
+            </p>
+          )}
+          <div>
+            <p className="mb-1 text-sm font-semibold">Pedidos entregues</p>
+            {!r.pedidos?.length ? (
+              <p className="py-4 text-center text-sm text-stone-500">Nenhuma entrega concluída neste período ainda.</p>
+            ) : (
+              <ul className="divide-y divide-stone-100 text-sm">
+                {r.pedidos.map((p) => (
+                  <li key={p.id} className="flex justify-between gap-2 py-2">
+                    <span className="min-w-0">
+                      #{p.id} · {p.clienteNome}
+                      <span className="block text-xs text-stone-500">
+                        {dataHoraCurta(p.entregueEm)} · {p.formaPagamento}
+                        {p.bairro && ` · ${p.bairro}`}
+                      </span>
+                    </span>
+                    <span className="shrink-0 font-semibold">{reais(p.total)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+    </Janela>
+  );
+}
+
+function Numero({ rotulo, valor, destaque }: { rotulo: string; valor: string; destaque?: boolean }) {
+  return (
+    <div className={cx('rounded-xl border p-3', destaque ? 'border-marca/30 bg-marca-clara' : 'border-stone-200 bg-white')}>
+      <p className="text-xs text-stone-500">{rotulo}</p>
+      <p className="mt-0.5 text-lg font-extrabold tabular-nums">{valor}</p>
+    </div>
+  );
+}
+
+const dataHoraCurta = (iso: string) => new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
