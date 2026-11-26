@@ -179,6 +179,8 @@ export default function Entrega() {
           aoFechar={() => setFinalizar(false)}
           aoConcluir={(codigo) => {
             guardar(`entrega:${rid}:ultimo`, codigo);
+            // Grava já: a navegação desmonta a página antes do efeito que salva o carrinho rodar.
+            guardar(`entrega:${rid}:carrinho`, []);
             setItens([]);
             navegar(`/entrega/${rid}/pedido/${codigo}`);
           }}
