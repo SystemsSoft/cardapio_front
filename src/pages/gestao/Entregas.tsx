@@ -67,6 +67,16 @@ export default function Entregas() {
     }
   };
 
+  const mudarTaxa = async (e: Entrega, cobrar: boolean) => {
+    try {
+      await gestao.put(`/entregas/${e.id}/taxa`, { cobrar });
+      avisar(cobrar ? `Entrega #${e.id}: taxa de entrega cobrada.` : `Entrega #${e.id}: sem taxa de entrega.`);
+      carregar();
+    } catch (er) {
+      avisar(mensagemDe(er), 'erro');
+    }
+  };
+
   const por = (s: StatusEntrega) =>
     entregas.filter((e) => e.status === s).sort((a, b) => (s === 'entregue' ? b.atualizadoEm.localeCompare(a.atualizadoEm) : a.criadoEm.localeCompare(b.criadoEm)));
   const cancelados = entregas.filter((e) => e.status === 'cancelado');
@@ -93,7 +103,7 @@ export default function Entregas() {
         <>
           <div className="md:hidden">
             <Abas<StatusEntrega> className="mb-4" atual={aba} aoMudar={setAba} abas={COLUNAS.map((c) => ({ valor: c.status, rotulo: c.titulo, contador: por(c.status).length }))} />
-            <Coluna entregas={por(aba)} agora={agora} aoMudar={mudar} />
+            <Coluna entregas={por(aba)} agora={agora} aoMudar={mudar} taxaPadrao={config.taxaEntrega} aoTaxa={mudarTaxa} />
           </div>
           <div className="hidden gap-4 md:grid md:grid-cols-2 xl:grid-cols-4">
             {COLUNAS.map((c) => {
@@ -105,7 +115,7 @@ export default function Entregas() {
                     {c.titulo}
                     <span className="ml-auto rounded-full bg-white px-2 text-xs text-stone-600">{lista.length}</span>
                   </h2>
-                  <Coluna entregas={lista} agora={agora} aoMudar={mudar} />
+                  <Coluna entregas={lista} agora={agora} aoMudar={mudar} taxaPadrao={config.taxaEntrega} aoTaxa={mudarTaxa} />
                 </section>
               );
             })}
@@ -167,18 +177,25 @@ function ConfiguracaoEntregas({ config, aoSalvar, aoDivulgar }: { config: Config
   );
 }
 
-function Coluna({ entregas, agora, aoMudar }: { entregas: Entrega[]; agora: number; aoMudar: (e: Entrega, s: StatusEntrega) => void }) {
+interface AcoesTaxa {
+  /** Taxa configurada agora no restaurante (o valor que volta ao marcar "cobrar"). */
+  taxaPadrao: number;
+  aoTaxa: (e: Entrega, cobrar: boolean) => void;
+}
+
+function Coluna({ entregas, agora, aoMudar, taxaPadrao, aoTaxa }: { entregas: Entrega[]; agora: number; aoMudar: (e: Entrega, s: StatusEntrega) => void } & AcoesTaxa) {
   if (!entregas.length) return <p className="py-8 text-center text-sm text-stone-400">Nada por aqui</p>;
   return (
     <div className="space-y-3">
       {entregas.map((e) => (
-        <CartaoEntrega key={e.id} entrega={e} agora={agora} aoMudar={aoMudar} />
+        <CartaoEntrega key={e.id} entrega={e} agora={agora} aoMudar={aoMudar} taxaPadrao={taxaPadrao} aoTaxa={aoTaxa} />
       ))}
     </div>
   );
 }
 
-function CartaoEntrega({ entrega: e, agora, aoMudar }: { entrega: Entrega; agora: number; aoMudar: (e: Entrega, s: StatusEntrega) => void }) {
+function CartaoEntrega({ entrega: e, agora, aoMudar, taxaPadrao, aoTaxa }: { entrega: Entrega; agora: number; aoMudar: (e: Entrega, s: StatusEntrega) => void } & AcoesTaxa) {
+  const aberto = e.status !== 'entregue' && e.status !== 'cancelado';
   const proximo = PROXIMO[e.status];
   const fone = e.telefone.replace(/\D/g, '');
   return (
@@ -223,8 +240,15 @@ function CartaoEntrega({ entrega: e, agora, aoMudar }: { entrega: Entrega; agora
         <span className="font-bold">{reais(e.total)}</span>
         <Selo>{e.formaPagamento}</Selo>
         {e.trocoPara ? <span className="text-xs text-stone-600">Troco para {reais(e.trocoPara)} ({reais(e.trocoPara - e.total)})</span> : null}
-        {e.taxaEntrega > 0 && <span className="text-xs text-stone-500">inclui entrega {reais(e.taxaEntrega)}</span>}
+        {!aberto && e.taxaEntrega > 0 && <span className="text-xs text-stone-500">inclui entrega {reais(e.taxaEntrega)}</span>}
       </div>
+      {aberto && (taxaPadrao > 0 || e.taxaEntrega > 0) && (
+        <label className="flex cursor-pointer items-center gap-2 border-t border-stone-100 px-4 py-2 text-sm">
+          <input type="checkbox" className="h-4 w-4 accent-[rgb(var(--marca))]" checked={e.taxaEntrega > 0} onChange={(ev) => aoTaxa(e, ev.target.checked)} />
+          <span className="flex-1">Cobrar taxa de entrega</span>
+          <span className={cx('font-semibold', e.taxaEntrega > 0 ? 'text-stone-800' : 'text-emerald-700')}>{e.taxaEntrega > 0 ? reais(e.taxaEntrega) : 'grátis'}</span>
+        </label>
+      )}
       {(proximo || e.status !== 'entregue') && e.status !== 'cancelado' && (
         <div className="flex items-center gap-2 border-t border-stone-100 px-4 py-2.5">
           {proximo && (
