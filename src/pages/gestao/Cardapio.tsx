@@ -267,6 +267,15 @@ function EditorProduto({
   };
 
   const imagemAtual = previa ?? imagem;
+  // No celular o preço vai para a linha de baixo, em largura total (ao lado da foto só cabe o nome).
+  const campoPreco = (
+    <Campo rotulo="Preço" dica="Sem preço, o produto aparece como “Em breve”.">
+      <div className="relative">
+        <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500">R$</span>
+        <Entrada value={preco} onChange={(e) => setPreco(e.target.value)} inputMode="decimal" placeholder="0,00" className="pl-10" />
+      </div>
+    </Campo>
+  );
 
   return (
     <Janela
@@ -274,6 +283,7 @@ function EditorProduto({
       aoFechar={aoFechar}
       titulo={produto ? 'Editar produto' : 'Novo produto'}
       largura="max-w-xl"
+      cheiaNoCelular
       rodape={
         <div className="flex gap-2">
           {produto && (
@@ -292,8 +302,8 @@ function EditorProduto({
       }
     >
       <div className="space-y-4">
-        <div className="flex gap-4">
-          <div className="relative h-28 w-28 shrink-0 overflow-hidden rounded-2xl ring-1 ring-stone-200">
+        <div className="flex gap-3 sm:gap-4">
+          <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-2xl ring-1 ring-stone-200 sm:h-28 sm:w-28">
             <ImagemProduto imagem={imagemAtual} nome={nome} className="h-full w-full text-[1.4rem]" />
             <button type="button" onClick={() => arquivo.current?.click()} className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-black/55 py-1.5 text-xs font-semibold text-white">
               <ImagePlus className="h-3.5 w-3.5" /> Foto
@@ -314,18 +324,14 @@ function EditorProduto({
             <Campo rotulo="Nome">
               <Entrada value={nome} onChange={(e) => setNome(e.target.value)} maxLength={80} autoFocus={!produto} placeholder="Ex.: Hambúrguer artesanal" />
             </Campo>
-            <Campo rotulo="Preço" dica="Sem preço, o produto aparece como “Em breve”.">
-              <div className="relative">
-                <span className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-stone-500">R$</span>
-                <Entrada value={preco} onChange={(e) => setPreco(e.target.value)} inputMode="decimal" placeholder="0,00" className="pl-10" />
-              </div>
-            </Campo>
+            <div className="hidden sm:block">{campoPreco}</div>
           </div>
         </div>
+        <div className="sm:hidden">{campoPreco}</div>
 
         <div>
           <p className="rotulo">Ou escolha um ícone</p>
-          <div className="sem-rolagem flex gap-1 overflow-x-auto pb-1">
+          <div className="sem-rolagem flex gap-1 overflow-x-auto pb-1 pr-6 [mask-image:linear-gradient(to_right,black_85%,transparent)]">
             {(ehImagem(produto?.imagem) && !foto ? [produto!.imagem, ...EMOJIS] : EMOJIS).map((e) => (
               <button
                 key={e}
@@ -385,7 +391,7 @@ function EditorProduto({
         )}
 
         <div>
-          <div className="mb-1.5 flex items-baseline justify-between gap-2">
+          <div className="mb-1.5 flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-2">
             <p className="text-sm font-medium text-stone-700">Adicionais</p>
             <p className="text-xs text-stone-500">Quem pede escolhe se quer cada um</p>
           </div>
@@ -494,13 +500,13 @@ function SeletorAdicionais({
           </button>
         ))}
       </div>
-      <div className="max-h-72 overflow-y-auto rounded-xl border border-stone-200 bg-white">
+      <div className="rounded-xl border border-stone-200 bg-white sm:max-h-72 sm:overflow-y-auto">
         {!visiveis.length ? (
           <p className="px-3 py-6 text-center text-sm text-stone-500">Nenhum produto encontrado.</p>
         ) : (
           visiveis.map((c) => (
             <div key={c.id}>
-              <p className="sticky top-0 z-10 border-b border-stone-100 bg-stone-50 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-stone-500">{c.nome}</p>
+              <p className="border-b border-stone-100 bg-stone-50 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-stone-500 sm:sticky sm:top-0 sm:z-10">{c.nome}</p>
               <ul className="divide-y divide-stone-100">
                 {c.produtos.map((p) => {
                   const marcado = selecionados.includes(p.id);
@@ -509,7 +515,7 @@ function SeletorAdicionais({
                       <label className={cx('flex cursor-pointer items-center gap-3 px-3 py-2 transition', marcado ? 'bg-marca-clara' : 'hover:bg-stone-50')}>
                         <input type="checkbox" className="h-5 w-5 shrink-0 accent-[rgb(var(--marca))]" checked={marcado} onChange={() => alternar(p.id)} />
                         <ImagemProduto imagem={p.imagem} nome={p.nome} className="h-9 w-9 shrink-0 rounded-lg text-[0.7rem]" />
-                        <span className="min-w-0 flex-1 truncate text-sm font-medium">{p.nome}</span>
+                        <span className="min-w-0 flex-1 break-words text-sm font-medium sm:truncate">{p.nome}</span>
                         <span className={cx('shrink-0 text-sm font-semibold', p.preco ? 'text-stone-700' : 'text-emerald-700')}>{p.preco ? `+ ${reais(p.preco)}` : 'grátis'}</span>
                       </label>
                     </li>
@@ -520,7 +526,7 @@ function SeletorAdicionais({
           ))
         )}
       </div>
-      <div className="flex items-center justify-between gap-2">
+      <div className="sticky bottom-0 z-10 -mx-3 -mb-3 flex items-center justify-between gap-2 rounded-b-xl border-t border-marca/20 bg-white/95 px-3 py-2.5 backdrop-blur sm:static sm:mx-0 sm:mb-0 sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
         <p className="text-sm text-stone-600">
           {selecionados.length} {selecionados.length === 1 ? 'adicional escolhido' : 'adicionais escolhidos'}
         </p>

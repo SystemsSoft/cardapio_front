@@ -295,6 +295,7 @@ export function Janela({
   children,
   rodape,
   largura = 'max-w-lg',
+  cheiaNoCelular = false,
 }: {
   aberta: boolean;
   aoFechar: () => void;
@@ -302,6 +303,8 @@ export function Janela({
   children: ReactNode;
   rodape?: ReactNode;
   largura?: string;
+  /** Formulários longos: no celular ocupa a tela toda (em vez da folha que sobe até 92%). */
+  cheiaNoCelular?: boolean;
 }) {
   useEffect(() => {
     if (!aberta) return;
@@ -322,10 +325,11 @@ export function Janela({
       <div
         className={cx(
           'relative flex max-h-[92dvh] w-full animate-subir flex-col rounded-t-3xl bg-white shadow-flutuante sm:animate-surgir sm:rounded-2xl',
+          cheiaNoCelular && 'max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:rounded-none max-sm:pt-[env(safe-area-inset-top)]',
           largura,
         )}
       >
-        <div className="mx-auto mt-2.5 h-1.5 w-10 rounded-full bg-stone-300 sm:hidden" />
+        {!cheiaNoCelular && <div className="mx-auto mt-2.5 h-1.5 w-10 rounded-full bg-stone-300 sm:hidden" />}
         {titulo !== undefined && (
           <div className="flex items-center gap-3 border-b border-stone-100 px-5 py-3.5">
             <h2 className="flex-1 text-lg font-bold">{titulo}</h2>
