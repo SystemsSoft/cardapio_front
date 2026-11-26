@@ -5,7 +5,7 @@ import { Abas, Aviso, Botao, Carregando, Entrada, Interruptor, Janela, Selo, Tit
 import { textoAdicionais } from '../../lib/adicionais';
 import { gestao, mensagemDe, urlBaseSalva } from '../../lib/api';
 import { centavosDoTexto, reais, telefone, tempoDesde, textoDosCentavos } from '../../lib/formato';
-import { linkMapa, linkRota } from '../../lib/geo';
+import { linkBusca, linkMapa, linkRota } from '../../lib/geo';
 import type { ConfigEntregas, Entrega, StatusEntrega } from '../../lib/tipos';
 import { useAgora } from '../../components/comuns';
 import { useGestao } from './contexto';
@@ -230,12 +230,7 @@ function CartaoEntrega({ entrega: e, agora, aoMudar, taxaPadrao, aoTaxa }: { ent
         </p>
         <p className="flex gap-1 text-stone-700">
           <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-stone-400" />
-          <span className="break-words">
-            {e.endereco}
-            {e.complemento && ` · ${e.complemento}`}
-            {e.bairro && ` · ${e.bairro}`}
-            {e.referencia && <span className="block text-xs text-stone-500">Ref.: {e.referencia}</span>}
-          </span>
+          <EnderecoEntrega entrega={e} />
         </p>
         {temLocal && (
           <button type="button" onClick={() => setVerMapa(true)} className="inline-flex items-center gap-1 rounded-lg bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-800 hover:bg-sky-100">
@@ -283,6 +278,20 @@ function CartaoEntrega({ entrega: e, agora, aoMudar, taxaPadrao, aoTaxa }: { ent
   );
 }
 
+/** Endereço clicável: abre o ponto marcado pelo cliente, ou a busca do endereço, no OpenStreetMap. */
+function EnderecoEntrega({ entrega: e }: { entrega: Entrega }) {
+  const texto = [e.endereco, e.complemento, e.bairro].filter(Boolean).join(' · ');
+  const href = e.latitude != null && e.longitude != null ? linkMapa(e.latitude, e.longitude) : linkBusca([e.endereco, e.bairro].filter(Boolean).join(', '));
+  return (
+    <span className="break-words">
+      <a href={href} target="_blank" rel="noopener" title="Abrir no OpenStreetMap" className="underline decoration-stone-300 underline-offset-2 hover:text-marca hover:decoration-marca">
+        {texto}
+      </a>
+      {e.referencia && <span className="block text-xs text-stone-500">Ref.: {e.referencia}</span>}
+    </span>
+  );
+}
+
 function JanelaMapa({ entrega: e, aoFechar }: { entrega: Entrega; aoFechar: () => void }) {
   const lat = e.latitude!;
   const lng = e.longitude!;
@@ -294,12 +303,7 @@ function JanelaMapa({ entrega: e, aoFechar }: { entrega: Entrega; aoFechar: () =
         </Suspense>
         <p className="flex gap-1.5 text-sm text-stone-700">
           <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-stone-400" />
-          <span className="break-words">
-            {e.endereco}
-            {e.complemento && ` · ${e.complemento}`}
-            {e.bairro && ` · ${e.bairro}`}
-            {e.referencia && <span className="block text-xs text-stone-500">Ref.: {e.referencia}</span>}
-          </span>
+          <EnderecoEntrega entrega={e} />
         </p>
         <p className="text-xs text-stone-500">Ponto marcado pelo cliente com a localização do celular.</p>
         <div className="flex flex-wrap gap-2">

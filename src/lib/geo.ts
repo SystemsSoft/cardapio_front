@@ -54,3 +54,5 @@ export async function enderecoDaPosicao(lat: number, lng: number): Promise<Ender
 export const linkMapa = (lat: number, lng: number) => `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=18/${lat}/${lng}`;
 export const linkRota = (lat: number, lng: number, origem?: { latitude: number; longitude: number } | null) =>
   `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${origem ? `${origem.latitude}%2C${origem.longitude}` : ''}%3B${lat}%2C${lng}#map=16/${lat}/${lng}`;
+/** Busca do endereço digitado no OpenStreetMap (quando o cliente não marcou a localização). */
+export const linkBusca = (endereco: string) => `https://www.openstreetmap.org/search?query=${encodeURIComponent(`${endereco}, Brasil`)}`;
