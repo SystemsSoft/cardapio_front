@@ -504,9 +504,29 @@ function SeletorAdicionais({
         {!visiveis.length ? (
           <p className="px-3 py-6 text-center text-sm text-stone-500">Nenhum produto encontrado.</p>
         ) : (
-          visiveis.map((c) => (
+          visiveis.map((c) => {
+            // "Todos" marca/desmarca os produtos visíveis desta categoria (respeita a busca).
+            const ids = c.produtos.map((p) => p.id);
+            const marcados = ids.filter((id) => selecionados.includes(id)).length;
+            const todos = marcados === ids.length;
+            return (
             <div key={c.id}>
-              <p className="border-b border-stone-100 bg-stone-50 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-stone-500 sm:sticky sm:top-0 sm:z-10">{c.nome}</p>
+              <div className="flex items-center gap-2 border-b border-stone-100 bg-stone-50 px-3 py-1.5 sm:sticky sm:top-0 sm:z-10">
+                <p className="min-w-0 flex-1 truncate text-xs font-bold uppercase tracking-wide text-stone-500">{c.nome}</p>
+                <label className="flex shrink-0 cursor-pointer items-center gap-1.5 rounded-lg px-1.5 py-0.5 text-xs font-semibold text-stone-700 hover:bg-stone-100">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-[rgb(var(--marca))]"
+                    checked={todos}
+                    ref={(el) => {
+                      if (el) el.indeterminate = marcados > 0 && !todos;
+                    }}
+                    onChange={() => aoMudar(todos ? selecionados.filter((id) => !ids.includes(id)) : [...selecionados, ...ids.filter((id) => !selecionados.includes(id))])}
+                    aria-label={`Marcar todos de ${c.nome}`}
+                  />
+                  Todos
+                </label>
+              </div>
               <ul className="divide-y divide-stone-100">
                 {c.produtos.map((p) => {
                   const marcado = selecionados.includes(p.id);
@@ -523,7 +543,8 @@ function SeletorAdicionais({
                 })}
               </ul>
             </div>
-          ))
+            );
+          })
         )}
       </div>
       <div className="sticky bottom-0 z-10 -mx-3 -mb-3 flex items-center justify-between gap-2 rounded-b-xl border-t border-marca/20 bg-white/95 px-3 py-2.5 backdrop-blur sm:static sm:mx-0 sm:mb-0 sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0 sm:backdrop-blur-none">
