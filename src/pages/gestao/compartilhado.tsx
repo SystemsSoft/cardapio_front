@@ -1,6 +1,8 @@
-import { ChefHat, CheckCheck, Clock, User, X } from 'lucide-react';
+import { ChefHat, CheckCheck, Clock, Pencil, Trash2, User, X } from 'lucide-react';
 import { useState } from 'react';
 import { useAgora } from '../../components/comuns';
+import { EditorItens, itensParaEnviar, linhasDoPedido, totalDasLinhas, type LinhaEdicao } from '../../components/EditorItens';
+import { useGestao } from './contexto';
 import { Aviso, Botao, Campo, Entrada, Janela, Selecao, Selo, cx, useAvisos } from '../../components/ui';
 import { gestao, mensagemDe } from '../../lib/api';
 import { textoAdicionais } from '../../lib/adicionais';
@@ -25,6 +27,7 @@ export function CartaoPedido({ pedido, mostrarMesa = true, compacto }: { pedido:
   const { avisar, confirmar } = useAvisos();
   const agora = useAgora();
   const [ocupado, setOcupado] = useState(false);
+  const [editando, setEditando] = useState(false);
   const proximo = PROXIMO[pedido.status];
   const espera = minutosDesde(pedido.criadoEm);
   const atrasado = ['recebido', 'preparando'].includes(pedido.status) && espera >= 20;
@@ -70,6 +73,36 @@ export function CartaoPedido({ pedido, mostrarMesa = true, compacto }: { pedido:
       <div className="flex flex-wrap items-center gap-2 border-t border-stone-100 bg-stone-50/60 px-4 py-2.5">
         <Selo cor={COR_STATUS[pedido.status]}>{pedido.status[0].toUpperCase() + pedido.status.slice(1)}</Selo>
         <span className="flex-1 text-sm font-semibold text-stone-700">{reais(pedido.total)}</span>
+        {pedido.status !== 'cancelado' && (
+          <button type="button" className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 hover:text-stone-800" aria-label="Editar pedido" title="Editar pedido" onClick={() => setEditando(true)}>
+            <Pencil className="h-4 w-4" />
+          </button>
+        )}
+        <button
+          type="button"
+          className="rounded-lg p-1.5 text-stone-400 hover:bg-red-50 hover:text-red-600"
+          aria-label="Excluir pedido"
+          title="Excluir pedido"
+          onClick={async () => {
+            if (
+              !(await confirmar({
+                titulo: `Excluir o pedido #${pedido.id}?`,
+                texto: 'O pedido some da mesa, da cozinha e da conta, e os itens voltam para o estoque. Não dá para desfazer.',
+                confirmar: 'Excluir pedido',
+                perigo: true,
+              }))
+            )
+              return;
+            try {
+              await gestao.del(`/pedidos/${pedido.id}`);
+              avisar(`Pedido #${pedido.id} excluído.`);
+            } catch (e) {
+              avisar(mensagemDe(e), 'erro');
+            }
+          }}
+        >
+          <Trash2 className="h-4 w-4" />
+        </button>
         {!['cancelado', 'entregue'].includes(pedido.status) && (
           <button
             type="button"
@@ -97,7 +130,65 @@ export function CartaoPedido({ pedido, mostrarMesa = true, compacto }: { pedido:
           </Botao>
         )}
       </div>
+      {editando && <JanelaEditarPedido pedido={pedido} aoFechar={() => setEditando(false)} />}
     </article>
+  );
+}
+
+/** Restaurante corrige um pedido de mesa já enviado: itens, quantidades, observações e nome. */
+function JanelaEditarPedido({ pedido, aoFechar }: { pedido: Pedido; aoFechar: () => void }) {
+  const { restaurante } = useGestao();
+  const { avisar } = useAvisos();
+  const [linhas, setLinhas] = useState<LinhaEdicao[]>(() => linhasDoPedido(pedido.itens));
+  const [nome, setNome] = useState(pedido.clienteNome);
+  const [obs, setObs] = useState(pedido.observacao);
+  const [salvando, setSalvando] = useState(false);
+
+  const salvar = async () => {
+    if (!linhas.length) return avisar('O pedido precisa ter pelo menos um item. Para tirar tudo, exclua o pedido.', 'erro');
+    setSalvando(true);
+    try {
+      await gestao.put(`/pedidos/${pedido.id}`, { clienteNome: nome, observacao: obs, itens: itensParaEnviar(linhas) });
+      avisar(`Pedido #${pedido.id} atualizado.`);
+      aoFechar();
+    } catch (e) {
+      avisar(mensagemDe(e), 'erro');
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <Janela
+      aberta
+      aoFechar={aoFechar}
+      titulo={`Editar pedido #${pedido.id} · Mesa ${pedido.mesa}`}
+      largura="max-w-xl"
+      cheiaNoCelular
+      rodape={
+        <Botao tamanho="g" largo carregando={salvando} disabled={!linhas.length} onClick={salvar}>
+          Salvar alterações · {reais(totalDasLinhas(linhas))}
+        </Botao>
+      }
+    >
+      <div className="space-y-4">
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="rotulo">Nome do cliente</span>
+            <Entrada value={nome} onChange={(e) => setNome(e.target.value)} maxLength={40} />
+          </label>
+          <label className="block">
+            <span className="rotulo">Observação do pedido</span>
+            <Entrada value={obs} onChange={(e) => setObs(e.target.value)} maxLength={300} placeholder="opcional" />
+          </label>
+        </div>
+        <section>
+          <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-stone-500">Itens</h3>
+          {restaurante && <EditorItens rid={restaurante.id} linhas={linhas} aoMudar={setLinhas} />}
+        </section>
+        <p className="text-xs text-stone-500">A cozinha, o garçom e o celular da mesa veem a mudança na hora. O estoque é ajustado sozinho.</p>
+      </div>
+    </Janela>
   );
 }
 

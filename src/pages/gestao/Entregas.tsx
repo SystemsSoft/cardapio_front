@@ -1,4 +1,4 @@
-import { BarChart3, Bike, ChefHat, CheckCircle2, CircleDollarSign, Copy, ExternalLink, LocateFixed, Map as IconeMapa, MapPin, MessageCircle, Navigation, Phone, Plus, Printer, Radar, Search, Trash2, X } from 'lucide-react';
+import { BarChart3, Bike, ChefHat, CheckCircle2, CircleDollarSign, Copy, ExternalLink, LocateFixed, Map as IconeMapa, MapPin, MessageCircle, Navigation, Pencil, Phone, Plus, Printer, Radar, Search, Trash2, X } from 'lucide-react';
 import { Suspense, lazy, useCallback, useEffect, useState, type ReactNode } from 'react';
 import { QrCode } from '../../components/comuns';
 import { Abas, Aviso, Botao, Carregando, Entrada, Interruptor, Janela, Selo, Titulo, Vazio, cx, useAvisos } from '../../components/ui';
@@ -9,6 +9,7 @@ import { CORES_FAIXAS, km, kmFaixa, linkBusca, linkMapa, linkRota, obterPosicao,
 import type { ConfigEntregas, Entrega, StatusEntrega } from '../../lib/tipos';
 import { useAgora } from '../../components/comuns';
 import { useGestao } from './contexto';
+import { EditorItens, itensParaEnviar, linhasDoPedido, totalDasLinhas, type LinhaEdicao } from '../../components/EditorItens';
 
 const Mapa = lazy(() => import('../../components/Mapa'));
 
@@ -464,12 +465,41 @@ function CartaoEntrega({ entrega: e, agora, aoMudar, taxaPadrao, aoTaxa }: { ent
   const proximo = PROXIMO[e.status];
   const fone = e.telefone.replace(/\D/g, '');
   const [verMapa, setVerMapa] = useState(false);
+  const [editando, setEditando] = useState(false);
+  const { avisar, confirmar } = useAvisos();
   const temLocal = e.latitude != null && e.longitude != null;
+  const excluir = async () => {
+    if (
+      !(await confirmar({
+        titulo: `Excluir a entrega #${e.id} de ${e.clienteNome}?`,
+        texto: 'O pedido some do quadro e os itens voltam para o estoque. O cliente deixa de ver o acompanhamento. Não dá para desfazer.',
+        confirmar: 'Excluir pedido',
+        perigo: true,
+      }))
+    )
+      return;
+    try {
+      await gestao.del(`/entregas/${e.id}`);
+      avisar(`Entrega #${e.id} excluída.`);
+    } catch (er) {
+      avisar(mensagemDe(er), 'erro');
+    }
+  };
   return (
     <article className="cartao overflow-hidden">
       <div className="flex items-center gap-2 border-b border-stone-100 px-4 py-2.5">
         <span className="rounded-lg bg-violet-600 px-2 py-0.5 text-xs font-bold text-white">Entrega #{e.id}</span>
         <span className="ml-auto text-xs text-stone-500">{tempoDesde(e.criadoEm, agora)}</span>
+        {aberto && (
+          <button type="button" onClick={() => setEditando(true)} className="rounded-lg p-1.5 text-stone-400 hover:bg-stone-100 hover:text-stone-800" aria-label="Editar pedido" title="Editar pedido">
+            <Pencil className="h-4 w-4" />
+          </button>
+        )}
+        {e.status !== 'entregue' && (
+          <button type="button" onClick={excluir} className="rounded-lg p-1.5 text-stone-400 hover:bg-red-50 hover:text-red-600" aria-label="Excluir pedido" title="Excluir pedido">
+            <Trash2 className="h-4 w-4" />
+          </button>
+        )}
       </div>
       <div className="space-y-1 px-4 pt-3 text-sm">
         <p className="font-bold">{e.clienteNome}</p>
@@ -497,6 +527,7 @@ function CartaoEntrega({ entrega: e, agora, aoMudar, taxaPadrao, aoTaxa }: { ent
         )}
       </div>
       {verMapa && temLocal && <JanelaMapa entrega={e} aoFechar={() => setVerMapa(false)} />}
+      {editando && <JanelaEditarEntrega entrega={e} aoFechar={() => setEditando(false)} />}
       <ul className="space-y-1 px-4 py-3 text-sm">
         {e.itens.map((i) => (
           <li key={i.id}>
@@ -547,6 +578,99 @@ function EnderecoEntrega({ entrega: e }: { entrega: Entrega }) {
       </a>
       {e.referencia && <span className="block text-xs text-stone-500">Ref.: {e.referencia}</span>}
     </span>
+  );
+}
+
+const FORMAS_ENTREGA = ['Pix', 'Cartão de crédito', 'Cartão de débito', 'Dinheiro', 'Vale-refeição', 'Vale-alimentação'];
+
+/** Restaurante corrige um pedido de entrega: itens, dados do cliente, endereço e pagamento. */
+function JanelaEditarEntrega({ entrega: e, aoFechar }: { entrega: Entrega; aoFechar: () => void }) {
+  const { restaurante } = useGestao();
+  const { avisar } = useAvisos();
+  const [linhas, setLinhas] = useState<LinhaEdicao[]>(() => linhasDoPedido(e.itens));
+  const [d, setD] = useState({
+    nome: e.clienteNome,
+    telefone: telefone(e.telefone),
+    endereco: e.endereco,
+    complemento: e.complemento,
+    bairro: e.bairro,
+    referencia: e.referencia,
+    observacao: e.observacao,
+  });
+  const [forma, setForma] = useState(e.formaPagamento);
+  const [troco, setTroco] = useState(e.trocoPara ? textoDosCentavos(e.trocoPara) : '');
+  const [salvando, setSalvando] = useState(false);
+  const subtotal = totalDasLinhas(linhas);
+  const campo = (k: keyof typeof d) => ({ value: d[k], onChange: (ev: { target: { value: string } }) => setD((x) => ({ ...x, [k]: k === 'telefone' ? telefone(ev.target.value) : ev.target.value })) });
+
+  const salvar = async () => {
+    if (!linhas.length) return avisar('O pedido precisa ter pelo menos um item. Para tirar tudo, exclua o pedido.', 'erro');
+    const trocoPara = forma === 'Dinheiro' && troco.trim() ? centavosDoTexto(troco) : null;
+    if (forma === 'Dinheiro' && troco.trim() && trocoPara == null) return avisar('Valor do troco inválido.', 'erro');
+    setSalvando(true);
+    try {
+      await gestao.put(`/entregas/${e.id}`, { ...d, formaPagamento: forma, trocoPara, itens: itensParaEnviar(linhas) });
+      avisar(`Entrega #${e.id} atualizada.`);
+      aoFechar();
+    } catch (er) {
+      avisar(mensagemDe(er), 'erro');
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <Janela
+      aberta
+      aoFechar={aoFechar}
+      titulo={`Editar entrega #${e.id}`}
+      largura="max-w-2xl"
+      cheiaNoCelular
+      rodape={
+        <Botao tamanho="g" largo carregando={salvando} disabled={!linhas.length} onClick={salvar}>
+          Salvar alterações · {reais(subtotal + e.taxaEntrega)}
+        </Botao>
+      }
+    >
+      <div className="space-y-5">
+        <section>
+          <h3 className="mb-2 text-sm font-bold uppercase tracking-wide text-stone-500">Itens</h3>
+          {restaurante && <EditorItens rid={restaurante.id} linhas={linhas} aoMudar={setLinhas} />}
+          <dl className="mt-2 space-y-1 px-1 text-sm">
+            <div className="flex justify-between"><dt className="text-stone-500">Subtotal</dt><dd>{reais(subtotal)}</dd></div>
+            <div className="flex justify-between"><dt className="text-stone-500">Entrega</dt><dd>{e.taxaEntrega ? reais(e.taxaEntrega) : 'grátis'}</dd></div>
+            <div className="flex justify-between font-bold"><dt>Total</dt><dd>{reais(subtotal + e.taxaEntrega)}</dd></div>
+          </dl>
+        </section>
+        <section className="space-y-3">
+          <h3 className="text-sm font-bold uppercase tracking-wide text-stone-500">Cliente e endereço</h3>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="block"><span className="rotulo">Nome</span><Entrada {...campo('nome')} maxLength={60} /></label>
+            <label className="block"><span className="rotulo">Telefone</span><Entrada {...campo('telefone')} inputMode="tel" /></label>
+          </div>
+          <label className="block"><span className="rotulo">Endereço (rua e número)</span><Entrada {...campo('endereco')} maxLength={120} /></label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block"><span className="rotulo">Complemento</span><Entrada {...campo('complemento')} maxLength={60} /></label>
+            <label className="block"><span className="rotulo">Bairro</span><Entrada {...campo('bairro')} maxLength={60} /></label>
+          </div>
+          <label className="block"><span className="rotulo">Ponto de referência</span><Entrada {...campo('referencia')} maxLength={120} /></label>
+          <label className="block"><span className="rotulo">Observação do pedido</span><Entrada {...campo('observacao')} maxLength={300} /></label>
+        </section>
+        <section className="space-y-3">
+          <h3 className="text-sm font-bold uppercase tracking-wide text-stone-500">Pagamento na entrega</h3>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            {FORMAS_ENTREGA.map((f) => (
+              <button key={f} type="button" onClick={() => setForma(f)} className={cx('rounded-xl border px-2 py-2.5 text-sm font-semibold transition', forma === f ? 'border-marca bg-marca-clara text-marca-escura' : 'border-stone-200 hover:bg-stone-50')}>
+                {f}
+              </button>
+            ))}
+          </div>
+          {forma === 'Dinheiro' && (
+            <label className="block max-w-xs"><span className="rotulo">Troco para quanto? (opcional)</span><Entrada value={troco} onChange={(ev) => setTroco(ev.target.value)} inputMode="decimal" placeholder="Ex.: 100,00" /></label>
+          )}
+        </section>
+      </div>
+    </Janela>
   );
 }
 
